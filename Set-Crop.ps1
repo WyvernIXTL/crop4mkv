@@ -17,7 +17,7 @@
   The not escaped relative or absolute path to the video file to process.
 
 .PARAMETER CropDetect
-  The cropdetect parameters to use with ffmpeg.
+  The cropdetect parameters to use with ffmpeg. Especially rounding might interest you.
   https://ffmpeg.org/ffmpeg-filters.html#cropdetect
 
 .PARAMETER DryRun
@@ -27,10 +27,14 @@
   Skip check if crop tag allready exists.
 
 .PARAMETER VerboseCropCheck
-  Output ffmpeg crop detection output.
+  Output ffmpeg crop detection output
+
+.PARAMETER Algorithm
+  * `MostSeenCropWins` - The crop that is most given out by ffmpeg is used.
+  * `SafestCropWins` - The crop that saves most of the image is used. (Default)
 
 .EXAMPLE
-  .\SetCrop.ps1 -Path ".\VIDEO.mkv" -CropDetect "24:2:0" -DryRun
+  .\SetCrop.ps1 -Path ".\VIDEO.mkv" -DryRun
 
   This command simulates the crop detection and editing without changing the file.
 #>
@@ -50,7 +54,10 @@ param (
 
     [switch]$OverWrite,
 
-    [switch]$VerboseCropCheck
+    [switch]$VerboseCropCheck,
+
+    [ValidateSet('SafestCropWins','MostSeenCropWins')]
+    [string]$Algorithm = 'SafestCropWins'
 )
 
 
@@ -136,6 +143,11 @@ try {
 
     $cropCount = 0
 
+    if ($Algorithm -eq "MostSeenCropWins") {
+        $xMap = @{}
+        $yMap = @{}
+    }
+
     foreach ($line in $cropDetectionLines) {
         if ($VerboseCropCheck) {
             Write-Host $line
@@ -149,13 +161,36 @@ try {
             continue
         }
 
-        if ([int]($cropRegexMatches.Groups[1].Value) -gt [int]$cropW) {
-            $cropW = $cropRegexMatches.Groups[1].Value
-            $cropX = $cropRegexMatches.Groups[3].Value
-        }
-        if ([int]($cropRegexMatches.Groups[2].Value) -gt [int]$cropH) {
-            $cropH = $cropRegexMatches.Groups[2].Value
-            $cropY = $cropRegexMatches.Groups[4].Value
+        if ($Algorithm -eq "SafestCropWins") {
+            if ([int]($cropRegexMatches.Groups[1].Value) -gt [int]$cropW) {
+                $cropW = $cropRegexMatches.Groups[1].Value
+                $cropX = $cropRegexMatches.Groups[3].Value
+            }
+            if ([int]($cropRegexMatches.Groups[2].Value) -gt [int]$cropH) {
+                $cropH = $cropRegexMatches.Groups[2].Value
+                $cropY = $cropRegexMatches.Groups[4].Value
+            }
+        } elseif ($Algorithm -eq "MostSeenCropWins") {
+            $xVal = @{
+                width = [int]$cropRegexMatches.Groups[1].Value
+                crop = [int]$cropRegexMatches.Groups[3].Value
+            } | ConvertTo-Json -Compress
+            $yVal = @{
+                height = [int]$cropRegexMatches.Groups[2].Value
+                crop = [int]$cropRegexMatches.Groups[4].Value
+            } | ConvertTo-Json -Compress
+
+            if (-not $xMap.ContainsKey($xVal)) {
+                $xMap[$xVal] = 1
+            }
+            if (-not $yMap.ContainsKey($yVal)) {
+                $yMap[$yVal] = 1
+            }
+
+            $xMap[$xVal] += 1
+            $yMap[$yVal] += 1
+        } else {
+            throw "SafestCropWins or MostSeenCropWins must be selected"
         }
 
         $cropCount += 1
@@ -165,6 +200,16 @@ try {
         throw "Failed to parse any crop detect output."
     }
     Write-Host "Detecteded $cropCount crop lines." -ForegroundColor Green
+
+
+    if ($Algorithm -eq "MostSeenCropWins") {
+        $xVal = ($xMap.GetEnumerator() | Sort-Object -Descending -Property Value | Select-Object -First 1).Key | ConvertFrom-Json
+        $cropX = $xVal.crop
+        $cropW = $xVal.width
+        $yVal = ($yMap.GetEnumerator() | Sort-Object -Descending -Property Value | Select-Object -First 1).Key | ConvertFrom-Json
+        $cropY = $yVal.crop
+        $cropH = $yVal.height
+    }
 
     Write-Host "Parsed cropdetect values: width=$cropW, height=$cropH, x=$cropX, y=$cropY" -ForegroundColor Green
 
