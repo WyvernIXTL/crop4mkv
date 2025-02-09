@@ -53,6 +53,7 @@ param (
     [switch]$VerboseCropCheck
 )
 
+
 # Convert relative path to absolute path.
 try {
     if ($Path -ne "") {
@@ -106,17 +107,11 @@ try {
 
     [int]$origWidth = $ffprobeOutput.streams[0].width
     [int]$origHeight = $ffprobeOutput.streams[0].height
-    [string]$sampleAspectRatio = $ffprobeOutput.streams[0].sample_aspect_ratio
     Write-Host "Original resolution: ${origWidth}x${origHeight}" -ForegroundColor Green
-
-    if ($sampleAspectRatio -ne "1:1" -or $sampleAspectRatio -eq "") {
-        Write-Host "Skipping because anamorphic."
-        return 0
-    }
 
     Write-Host "Running ffmpeg cropdetect with parameters $CropDetect ..." -ForegroundColor Cyan
 
-    $ffmpegOutput = $( $_goodOutput = & ffmpeg.exe -hide_banner -loglevel info -ss 00:02:00 -skip_frame nokey -i "$AbsolutePath" -vf "$CropDetect" -t 6:00 -f null NUL) 2>&1
+    $ffmpegOutput = $( & ffmpeg.exe -hide_banner -loglevel info -ss 00:02:00 -skip_frame nokey -i "$AbsolutePath" -vf "$CropDetect" -t 6:00 -f null NUL) 2>&1
     if ($LASTEXITCODE -ne 0) { 
         throw "ffmpeg cropdetect failed with exit code $LASTEXITCODE."
     }
@@ -148,19 +143,19 @@ try {
 
         # Extract numbers using regex: crop=w:h:x:y
         $cropRegex = "crop=(\d+):(\d+):(\d+):(\d+)"
-        $matches = [regex]::Match($line, $cropRegex)
-        if (-not $matches.Success -or $matches.Groups.Count -ne 5) {
+        $cropRegexMatches = [regex]::Match($line, $cropRegex)
+        if (-not $cropRegexMatches.Success -or $cropRegexMatches.Groups.Count -ne 5) {
             Write-Debug "Failed to match output with regex."
             continue
         }
 
-        if ([int]($matches.Groups[1].Value) -gt [int]$cropW) {
-            $cropW = $matches.Groups[1].Value
-            $cropX = $matches.Groups[3].Value
+        if ([int]($cropRegexMatches.Groups[1].Value) -gt [int]$cropW) {
+            $cropW = $cropRegexMatches.Groups[1].Value
+            $cropX = $cropRegexMatches.Groups[3].Value
         }
-        if ([int]($matches.Groups[2].Value) -gt [int]$cropH) {
-            $cropH = $matches.Groups[2].Value
-            $cropY = $matches.Groups[4].Value
+        if ([int]($cropRegexMatches.Groups[2].Value) -gt [int]$cropH) {
+            $cropH = $cropRegexMatches.Groups[2].Value
+            $cropY = $cropRegexMatches.Groups[4].Value
         }
 
         $cropCount += 1
@@ -188,9 +183,11 @@ try {
     Write-Host "  Crop Right : $cropRight"
     Write-Host "  Crop Bottom: $cropBottom"
 
-    # Build the mkvpropedit command.
-    # Assume the video track is the first video track, so use '--edit track:v1'.
-    # The properties set are "Pixel crop top", "Pixel crop bottom", "Pixel crop left", and "Pixel crop right".
+    if ($cropTop -eq 0 -and $cropBottom -eq 0 -and  $cropLeft -eq 0 -and  $cropRight -eq 0) {
+        Write-Host "No margin to write." -ForegroundColor Yellow
+        exit 0
+    }
+
     $mkvpropeditArgs = @(
         "$AbsolutePath",
         "--edit", "track:v1"
@@ -211,7 +208,6 @@ try {
         $mkvpropeditArgs += "--set"
         $mkvpropeditArgs += "pixel-crop-right=$cropRight"
     }
-
 
     $commandString = "mkvpropedit.exe " + ($mkvpropeditArgs -join " ")
 
