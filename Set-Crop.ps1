@@ -15,12 +15,18 @@
 .PARAMETER Path
   The relative or absolute path to the video file to process.
 
+.PARAMETER LiteralPath
+  The not escaped relative or absolute path to the video file to process.
+
 .PARAMETER CropDetect
   The cropdetect parameters to use with ffmpeg, in the format "limit:round:reset". 
   Default is "24:2:0" which is closer to what HandBrake uses.
 
 .PARAMETER DryRun
   If specified, the script will only output the actions it would perform, without making any changes.
+
+.PARAMETER OverWrite
+  Overwrite crop tags of mkv.
 
 .EXAMPLE
   .\SetCrop.ps1 -Path ".\VIDEO.mkv" -CropDetect "24:2:0" -DryRun
@@ -39,15 +45,18 @@ param (
     [Parameter(Mandatory = $false)]
     [string]$CropDetect = "24:2:0",
 
-    [switch]$DryRun
+    [switch]$DryRun,
+
+    [switch]$OverWrite
 )
 
 # Convert relative path to absolute path.
 try {
     if ($Path -ne "") {
-        $AbsolutePath = (Resolve-Path -Path $Path).Path
+        $AbsolutePathObj = (Resolve-Path -Path $Path)
+        
     } elseif ($LiteralPath -ne "") {
-        $AbsolutePath = (Resolve-Path -LiteralPath $LiteralPath).Path
+        $AbsolutePathObj = (Resolve-Path -LiteralPath $LiteralPath)
     } else {
         throw "Please input a Path or a LiteralPath"
     }
@@ -55,6 +64,9 @@ try {
     Write-Error "Failed to resolve the absolute path for file: $Path"
     exit 1
 }
+
+$AbsolutePath = $AbsolutePathObj.Path
+$FileName = (Get-Item $AbsolutePathObj).Name
 
 # Ensure external tools are available in PATH.
 $requiredTools = @("mkvinfo.exe", "mkvpropedit.exe", "ffprobe.exe", "ffmpeg.exe")
@@ -66,19 +78,20 @@ foreach ($tool in $requiredTools) {
 }
 
 try {
-    Write-Host "Processing file: $AbsolutePath" -ForegroundColor Cyan
-
     # Check for existing crop info with mkvinfo.
-    Write-Host "Running mkvinfo to check for cropping..." -ForegroundColor Cyan
-    $mkvinfoOutput = & mkvinfo.exe $AbsolutePath 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "mkvinfo failed with exit code $LASTEXITCODE."
-    }
+    if (-not $OverWrite) {
+        Write-Host "=================================== `{ $FileName `} ===================================" -ForegroundColor Cyan
+        $mkvinfoOutput = & mkvinfo.exe $AbsolutePath 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "mkvinfo failed with exit code $LASTEXITCODE."
+        }
 
-    if ($mkvinfoOutput -match "Pixel crop") {
-        Write-Host "File already contains crop information; no further action required." -ForegroundColor Yellow
-        exit 0
+        if ($mkvinfoOutput -match "Pixel crop") {
+            Write-Host "File already contains crop information; no further action required." -ForegroundColor Yellow
+            exit 0
+        }
     }
+    
 
     # Get original video resolution via ffprobe.
     Write-Host "Retrieving video resolution using ffprobe..." -ForegroundColor Cyan
