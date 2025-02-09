@@ -29,6 +29,13 @@ scoop install extras/mkvtoolnix
 
 ## Installation
 
+### [Scoop](https://scoop.sh/)
+
+```
+scoop bucket add stupid-bucket https://github.com/WyvernIXTL/stupid-bucket
+scoop install set-crop-for-mkv
+```
+
 ### Manual
 
 * Download the script.
