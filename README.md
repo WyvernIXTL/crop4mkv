@@ -11,8 +11,18 @@ Set-Crop PATH_TO_FILE
 
 Set Crop for a directory:
 ```pwsh
-Get-Childitem -Recurse -Filter *.mkv | foreach { Set-Crop $_ }
+Get-Childitem -Recurse -Filter *.mkv | foreach { Set-Crop -LiteralPath $_.FullName }
 ```
+
+Use dry run:
+```pwsh
+Set-Crop PATH_TO_FILE -DryRun
+```
+
+Use `-LiteralPath` if you are handling unescaped strings and `Path` when handling escaped strings.
+
+Did I meantion my spite for Powershell?
+
 
 ## Prequisites
 

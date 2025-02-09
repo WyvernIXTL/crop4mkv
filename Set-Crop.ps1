@@ -12,7 +12,7 @@
   A dry run mode is available via the -DryRun parameter.
   The script also converts any relative file path to an absolute file path based on the current working directory.
 
-.PARAMETER FilePath
+.PARAMETER Path
   The relative or absolute path to the video file to process.
 
 .PARAMETER CropDetect
@@ -23,16 +23,18 @@
   If specified, the script will only output the actions it would perform, without making any changes.
 
 .EXAMPLE
-  .\SetCrop.ps1 -FilePath ".\VIDEO.mkv" -CropDetect "24:2:0" -DryRun
+  .\SetCrop.ps1 -Path ".\VIDEO.mkv" -CropDetect "24:2:0" -DryRun
 
   This command simulates the crop detection and editing without changing the file.
 #>
 
 [CmdletBinding()]
 param (
-    [Parameter(Mandatory = $true, Position = 0)]
-    [ValidateScript({ Test-Path $_ })]
-    [string]$FilePath,
+    [ValidateScript({ Test-Path -Path $_ })]
+    [string]$Path,
+
+    [ValidateScript({ Test-Path -LiteralPath $_ })]
+    [string]$LiteralPath,
 
     [Parameter(Mandatory = $false)]
     [string]$CropDetect = "24:2:0",
@@ -42,9 +44,15 @@ param (
 
 # Convert relative path to absolute path.
 try {
-    $AbsoluteFilePath = (Resolve-Path $FilePath).Path
+    if ($Path -ne "") {
+        $AbsolutePath = (Resolve-Path -Path $Path).Path
+    } elseif ($LiteralPath -ne "") {
+        $AbsolutePath = (Resolve-Path -LiteralPath $LiteralPath).Path
+    } else {
+        throw "Please input a Path or a LiteralPath"
+    }
 } catch {
-    Write-Error "Failed to resolve the absolute path for file: $FilePath"
+    Write-Error "Failed to resolve the absolute path for file: $Path"
     exit 1
 }
 
@@ -58,11 +66,11 @@ foreach ($tool in $requiredTools) {
 }
 
 try {
-    Write-Host "Processing file: $AbsoluteFilePath" -ForegroundColor Cyan
+    Write-Host "Processing file: $AbsolutePath" -ForegroundColor Cyan
 
     # Check for existing crop info with mkvinfo.
     Write-Host "Running mkvinfo to check for cropping..." -ForegroundColor Cyan
-    $mkvinfoOutput = & mkvinfo.exe $AbsoluteFilePath 2>&1
+    $mkvinfoOutput = & mkvinfo.exe $AbsolutePath 2>&1
     if ($LASTEXITCODE -ne 0) {
         throw "mkvinfo failed with exit code $LASTEXITCODE."
     }
@@ -74,7 +82,7 @@ try {
 
     # Get original video resolution via ffprobe.
     Write-Host "Retrieving video resolution using ffprobe..." -ForegroundColor Cyan
-    $ffprobeCommand = "ffprobe.exe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 `"$AbsoluteFilePath`""
+    $ffprobeCommand = "ffprobe.exe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 `"$AbsolutePath`""
     $resolutionOutput = Invoke-Expression $ffprobeCommand
     if ([string]::IsNullOrWhiteSpace($resolutionOutput)) {
         throw "ffprobe did not return resolution information."
@@ -90,7 +98,7 @@ try {
 
     Write-Host "Running ffmpeg cropdetect with parameters cropdetect=$CropDetect ..." -ForegroundColor Cyan
 
-    $ffmpegOutput = $( $_goodOutput = & ffmpeg.exe -hide_banner -loglevel info -ss 00:02:00 -skip_frame nokey -i "$AbsoluteFilePath" -vf "cropdetect=$CropDetect" -t 6:00 -f null NUL) 2>&1
+    $ffmpegOutput = $( $_goodOutput = & ffmpeg.exe -hide_banner -loglevel info -ss 00:02:00 -skip_frame nokey -i "$AbsolutePath" -vf "cropdetect=$CropDetect" -t 6:00 -f null NUL) 2>&1
     if ($LASTEXITCODE -ne 0) { 
         throw "ffmpeg cropdetect failed with exit code $LASTEXITCODE."
     }
@@ -162,7 +170,7 @@ try {
     # Assume the video track is the first video track, so use '--edit track:v1'.
     # The properties set are "Pixel crop top", "Pixel crop bottom", "Pixel crop left", and "Pixel crop right".
     $mkvpropeditArgs = @(
-        "$AbsoluteFilePath",
+        "$AbsolutePath",
         "--edit", "track:v1"
     )
     if ($cropTop -ne 0) {
