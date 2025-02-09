@@ -82,7 +82,7 @@ foreach ($tool in $requiredTools) {
 try {
     # Check for existing crop info with mkvinfo.
     if (-not $OverWrite) {
-        Write-Host "=== `{ $Path `} ===" -ForegroundColor Cyan
+        Write-Host "========================================= `{ $Path `} ============================================" -ForegroundColor White
         $mkvinfoOutput = & mkvinfo.exe $AbsolutePath 2>&1
         if ($LASTEXITCODE -ne 0) {
             throw "mkvinfo failed with exit code $LASTEXITCODE."
@@ -97,19 +97,22 @@ try {
 
     # Get original video resolution via ffprobe.
     Write-Host "Retrieving video resolution using ffprobe..." -ForegroundColor Cyan
-    $ffprobeCommand = "ffprobe.exe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 `"$AbsolutePath`""
-    $resolutionOutput = Invoke-Expression $ffprobeCommand
-    if ([string]::IsNullOrWhiteSpace($resolutionOutput)) {
+    $ffprobeCommand = "ffprobe -v error -select_streams v:0 -show_entries stream=width,height,sample_aspect_ratio -of json `"$AbsolutePath`""
+    $ffprobeCommandOutput = Invoke-Expression $ffprobeCommand
+    if ([string]::IsNullOrWhiteSpace($ffprobeCommandOutput)) {
         throw "ffprobe did not return resolution information."
     }
-    # Expected format "widthxheight", e.g., "1920x1080"
-    $resParts = $resolutionOutput.Trim() -split "x"
-    if ($resParts.Count -ne 2 -and $resParts.Count -ne 3) {
-        throw "Unexpected resolution format: $resolutionOutput"
-    }
-    [int]$origWidth = $resParts[0]
-    [int]$origHeight = $resParts[1]
+    $ffprobeOutput = $ffprobeCommandOutput | ConvertFrom-Json
+
+    [int]$origWidth = $ffprobeOutput.streams[0].width
+    [int]$origHeight = $ffprobeOutput.streams[0].height
+    [string]$sampleAspectRatio = $ffprobeOutput.streams[0].sample_aspect_ratio
     Write-Host "Original resolution: ${origWidth}x${origHeight}" -ForegroundColor Green
+
+    if ($sampleAspectRatio -ne "1:1" -or $sampleAspectRatio -eq "") {
+        Write-Host "Skipping because anamorphic."
+        return 0
+    }
 
     Write-Host "Running ffmpeg cropdetect with parameters $CropDetect ..." -ForegroundColor Cyan
 
@@ -151,11 +154,11 @@ try {
             continue
         }
 
-        if ($matches.Groups[1].Value -ge $cropW) {
+        if ([int]($matches.Groups[1].Value) -gt [int]$cropW) {
             $cropW = $matches.Groups[1].Value
             $cropX = $matches.Groups[3].Value
         }
-        if ($matches.Groups[2].Value -ge $cropH) {
+        if ([int]($matches.Groups[2].Value) -gt [int]$cropH) {
             $cropH = $matches.Groups[2].Value
             $cropY = $matches.Groups[4].Value
         }
