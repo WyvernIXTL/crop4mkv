@@ -3,14 +3,12 @@
   Checks if a Matroska video file has any crop metadata; if missing, it calculates the crop factor using ffmpeg and applies it with mkvpropedit.
 
 .DESCRIPTION
-  This script is completely safe: it uses strict error checking and fails fast on any unexpected condition.
   It uses the following commands:
     • mkvinfo: to check for an existing crop metadata.
     • ffprobe: to get the video’s resolution.
     • ffmpeg: to run cropdetect (with configurable parameters) on the first 10 seconds of the video.
     • mkvpropedit: to set the crop values on the video track.
   A dry run mode is available via the -DryRun parameter.
-  The script also converts any relative file path to an absolute file path based on the current working directory.
 
 .PARAMETER Path
   The relative or absolute path to the video file to process.
@@ -19,14 +17,17 @@
   The not escaped relative or absolute path to the video file to process.
 
 .PARAMETER CropDetect
-  The cropdetect parameters to use with ffmpeg, in the format "limit:round:reset". 
-  Default is "24:2:0" which is closer to what HandBrake uses.
+  The cropdetect parameters to use with ffmpeg.
+  https://ffmpeg.org/ffmpeg-filters.html#cropdetect
 
 .PARAMETER DryRun
   If specified, the script will only output the actions it would perform, without making any changes.
 
 .PARAMETER OverWrite
-  Overwrite crop tags of mkv.
+  Skip check if crop tag allready exists.
+
+.PARAMETER VerboseCropCheck
+  Output ffmpeg crop detection output.
 
 .EXAMPLE
   .\SetCrop.ps1 -Path ".\VIDEO.mkv" -CropDetect "24:2:0" -DryRun
@@ -43,11 +44,13 @@ param (
     [string]$LiteralPath,
 
     [Parameter(Mandatory = $false)]
-    [string]$CropDetect = "24:2:0",
+    [string]$CropDetect = "cropdetect=mode=black,cropdetect=limit=24,cropdetect=round=2,cropdetect=skip=0,cropdetect=reset=1",
 
     [switch]$DryRun,
 
-    [switch]$OverWrite
+    [switch]$OverWrite,
+
+    [switch]$VerboseCropCheck
 )
 
 # Convert relative path to absolute path.
@@ -66,7 +69,6 @@ try {
 }
 
 $AbsolutePath = $AbsolutePathObj.Path
-$FileName = (Get-Item $AbsolutePathObj).Name
 
 # Ensure external tools are available in PATH.
 $requiredTools = @("mkvinfo.exe", "mkvpropedit.exe", "ffprobe.exe", "ffmpeg.exe")
@@ -80,7 +82,7 @@ foreach ($tool in $requiredTools) {
 try {
     # Check for existing crop info with mkvinfo.
     if (-not $OverWrite) {
-        Write-Host "=================================== `{ $FileName `} ===================================" -ForegroundColor Cyan
+        Write-Host "=== `{ $Path `} ===" -ForegroundColor Cyan
         $mkvinfoOutput = & mkvinfo.exe $AbsolutePath 2>&1
         if ($LASTEXITCODE -ne 0) {
             throw "mkvinfo failed with exit code $LASTEXITCODE."
@@ -109,9 +111,9 @@ try {
     [int]$origHeight = $resParts[1]
     Write-Host "Original resolution: ${origWidth}x${origHeight}" -ForegroundColor Green
 
-    Write-Host "Running ffmpeg cropdetect with parameters cropdetect=$CropDetect ..." -ForegroundColor Cyan
+    Write-Host "Running ffmpeg cropdetect with parameters $CropDetect ..." -ForegroundColor Cyan
 
-    $ffmpegOutput = $( $_goodOutput = & ffmpeg.exe -hide_banner -loglevel info -ss 00:02:00 -skip_frame nokey -i "$AbsolutePath" -vf "cropdetect=$CropDetect" -t 6:00 -f null NUL) 2>&1
+    $ffmpegOutput = $( $_goodOutput = & ffmpeg.exe -hide_banner -loglevel info -ss 00:02:00 -skip_frame nokey -i "$AbsolutePath" -vf "$CropDetect" -t 6:00 -f null NUL) 2>&1
     if ($LASTEXITCODE -ne 0) { 
         throw "ffmpeg cropdetect failed with exit code $LASTEXITCODE."
     }
@@ -128,14 +130,19 @@ try {
         throw "Count of detected lines is 0."
     }
 
-    $cropW = 0n
-    $cropH = 0n
-    $cropX = 0n
-    $cropY = 0n
+
+    [int]$cropW = 0
+    [int]$cropH = 0
+    [int]$cropX = 0
+    [int]$cropY = 0
 
     $cropCount = 0
 
     foreach ($line in $cropDetectionLines) {
+        if ($VerboseCropCheck) {
+            Write-Host $line
+        }
+
         # Extract numbers using regex: crop=w:h:x:y
         $cropRegex = "crop=(\d+):(\d+):(\d+):(\d+)"
         $matches = [regex]::Match($line, $cropRegex)
@@ -144,10 +151,14 @@ try {
             continue
         }
 
-        $cropW += $matches.Groups[1].Value
-        $cropH += $matches.Groups[2].Value
-        $cropX += $matches.Groups[3].Value
-        $cropY += $matches.Groups[4].Value
+        if ($matches.Groups[1].Value -ge $cropW) {
+            $cropW = $matches.Groups[1].Value
+            $cropX = $matches.Groups[3].Value
+        }
+        if ($matches.Groups[2].Value -ge $cropH) {
+            $cropH = $matches.Groups[2].Value
+            $cropY = $matches.Groups[4].Value
+        }
 
         $cropCount += 1
     }
@@ -156,11 +167,6 @@ try {
         throw "Failed to parse any crop detect output."
     }
     Write-Host "Detecteded $cropCount crop lines." -ForegroundColor Green
-
-    $cropW /= $cropCount
-    $cropH /= $cropCount
-    $cropX /= $cropCount
-    $cropY /= $cropCount
 
     Write-Host "Parsed cropdetect values: width=$cropW, height=$cropH, x=$cropX, y=$cropY" -ForegroundColor Green
 
