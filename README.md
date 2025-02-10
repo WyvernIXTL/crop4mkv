@@ -3,7 +3,7 @@
 **Bun ts script that analyses crop margins of a video and sets the flags for an mkv.**
 
 * This script searches with [`ffmpeg` `cropdetect`](https://ffmpeg.org/ffmpeg-filters.html#cropdetect) at 3 different points in the video to check the crop.
-* It then takes the crop per axis that clips the least pixel (the safes crop).
+* It then takes the crop per axis that clips the least pixels (the safe crop).
 * The crop is then saved into the mkv flags with [MKVToolNix](https://mkvtoolnix.download/) without touching the video stream.
 
 Video players like [MPV](https://mpv.io/) read this mkv flag and crop the video at play time.
@@ -11,29 +11,25 @@ Video players like [MPV](https://mpv.io/) read this mkv flag and crop the video 
 
 ## Usage
 
-Set crop for a single file.
+Generate and set crop tags for a single file.
 ```pwsh
 crop4mkv PATH_TO_FILE
 ```
 
-Set Crop for a directory:
+Generate and set crop tags for a directory with powershell:
 ```pwsh
 Get-Childitem -Recurse -Filter *.mkv | foreach { crop4mkv $_.FullName }
 ```
 
-Use dry run:
+Do not write tag to file:
 ```pwsh
 crop4mkv PATH_TO_FILE --dryrun
 ```
 
-Skip checking if crop tags allready exist:
+Skip check for existance crop tags:
 ```pwsh
 crop4mkv PATH_TO_FILE --overwrite
 ```
-
-Use `-LiteralPath` if you are handling unescaped strings and `Path` when handling escaped strings.
-
-Did I meantion my spite for Powershell?
 
 
 ## Prequisites
