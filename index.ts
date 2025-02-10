@@ -6,9 +6,8 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import { $, env, ShellError } from "bun";
+import { $ } from "bun";
 import { parseArgs } from "util";
-import { resolve, isAbsolute } from "path";
 
 function error(message: string): void {
     console.write(
@@ -69,11 +68,13 @@ function writeSeparator(): void {
 }
 
 async function getAbsolutPath(path: string): Promise<string> {
-    if (isAbsolute(path)) {
-        return path;
+    const videoFile = await Bun.file(path);
+
+    if (!(await videoFile.exists()) || !videoFile.name) {
+        errorAndExit(`ERROR: File does not exist: '${videoFile.name || path}'`);
     }
 
-    return resolve(await $`pwd`.text(), path);
+    return videoFile.name;
 }
 
 type Frame = {
@@ -95,8 +96,7 @@ type VideoInfo = { width: number; height: number; duration: number };
 async function cropFlagIsSet(path: string): Promise<boolean> {
     const output = await $`mkvmerge -J ${path}`.json().catch((e) => {
         error("ERROR (while executing mkvmerge):");
-        console.error(e);
-        process.exit(1);
+        errorAndExit(e.stdout.toString());
     });
     for (const track of output["tracks"]) {
         if ("cropping" in track["properties"]) {
@@ -112,8 +112,7 @@ async function getVideoInfo(path: string): Promise<VideoInfo> {
             .json()
             .catch((e) => {
                 error("ERROR (while executing ffprobe):");
-                console.error(e);
-                process.exit(1);
+                errorAndExit(e.stderr.toString());
             });
 
     return {
@@ -160,8 +159,7 @@ async function detectSafeCrop(
             .quiet()
             .catch((e) => {
                 error("ERROR (while executing ffmpeg):");
-                console.error(e);
-                process.exit(1);
+                errorAndExit(e.stderr.toString());
             });
 
     if (!stderr) {
@@ -298,12 +296,15 @@ async function writeCropToFileMetadata(
     ok(`Write success!`);
 }
 
-//                 ███╗   ███╗ █████╗ ██╗███╗   ██╗
-//                 ████╗ ████║██╔══██╗██║████╗  ██║
-// █████╗█████╗    ██╔████╔██║███████║██║██╔██╗ ██║    █████╗█████╗
-// ╚════╝╚════╝    ██║╚██╔╝██║██╔══██║██║██║╚██╗██║    ╚════╝╚════╝
-//                 ██║ ╚═╝ ██║██║  ██║██║██║ ╚████║
-//                 ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝
+// ███▄ ▄███▓ ▄▄▄       ██▓ ███▄    █
+// ▓██▒▀█▀ ██▒▒████▄    ▓██▒ ██ ▀█   █
+// ▓██    ▓██░▒██  ▀█▄  ▒██▒▓██  ▀█ ██▒
+// ▒██    ▒██ ░██▄▄▄▄██ ░██░▓██▒  ▐▌██▒
+// ▒██▒   ░██▒ ▓█   ▓██▒░██░▒██░   ▓██░
+// ░ ▒░   ░  ░ ▒▒   ▓▒█░░▓  ░ ▒░   ▒ ▒
+// ░  ░      ░  ▒   ▒▒ ░ ▒ ░░ ░░   ░ ▒░
+// ░      ░     ░   ▒    ▒ ░   ░   ░ ░
+//        ░         ░  ░ ░           ░
 
 checkIfToolsAreInPath();
 
@@ -349,23 +350,23 @@ file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 writeSeparator();
 
-const videoFile = await getAbsolutPath(positionals[positionals.length - 1]);
+const videoFilePath = await getAbsolutPath(positionals[positionals.length - 1]);
 
-info(`File: ${videoFile}`);
+info(`File: ${videoFilePath}`);
 
-if (!values["overwrite"] && (await cropFlagIsSet(videoFile))) {
+if (!values["overwrite"] && (await cropFlagIsSet(videoFilePath))) {
     warn(`Skipping file as mkv crop flags where allready set.`);
     info(`Use --overwrite flag to still process file.`);
     process.exit(0);
 }
 
-let videoInfo = await getVideoInfo(videoFile);
+let videoInfo = await getVideoInfo(videoFilePath);
 
 info(`Resolution: ${videoInfo.width}x${videoInfo.height}`);
 info(`Length: ${secsToTimeString(videoInfo.duration)} hh:mm:ss`);
 
 let cropFrame = await detectSafeCropFromMultipleParts(
-    videoFile,
+    videoFilePath,
     videoInfo.duration
 );
 let crop = calculateCrop(videoInfo, cropFrame);
@@ -376,4 +377,4 @@ ok(`Crop:
   - right:  ${crop.right}
   - bottom: ${crop.bottom}`);
 
-writeCropToFileMetadata(videoFile, crop, values.dryrun);
+writeCropToFileMetadata(videoFilePath, crop, values.dryrun);
