@@ -3,6 +3,9 @@
   "version": "0.3.0",
   "module": "index.ts",
   "type": "module",
+  "bin": {
+    "crop4mkv": "./index.ts"
+  },
   "author": {
     "name": "Adam McKellar",
     "email": "dev@mckellar.eu",
