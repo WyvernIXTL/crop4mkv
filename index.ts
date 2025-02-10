@@ -114,23 +114,27 @@ function secsToTime(secs: number): string {
     )}:${padNumberToString(seconds)}`;
 }
 
+type Frame = {
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+};
+
+type Crop = {
+    top: number;
+    bottom: number;
+    left: number;
+    right: number;
+};
+
 function calculateCrop(
     video: {
         width: number;
         height: number;
     },
-    frame: {
-        width: number;
-        height: number;
-        x: number;
-        y: number;
-    }
-): {
-    top: number;
-    bottom: number;
-    left: number;
-    right: number;
-} {
+    frame: Frame
+): Crop {
     return {
         left: frame.x,
         top: frame.y,
@@ -145,7 +149,7 @@ async function detectSafeCrop(
     durationInSec: number,
     limit: number = 24,
     round: number = 2
-): Promise<{ width: number; height: number; x: number; y: number }> {
+): Promise<Frame> {
     const start = secsToTime(startInSecs);
     const duration = secsToTime(durationInSec);
     const { stdout, stderr } =
@@ -192,6 +196,51 @@ async function detectSafeCrop(
     info(`Checked ${count} frames.`);
 
     return frame;
+}
+
+function maxLargestAxisOfFrame(frame1: Frame, frame2: Frame): Frame {
+    let newFrame: Frame = { ...frame1 };
+
+    if (frame2.width > newFrame.width) {
+        newFrame.width = frame2.width;
+        newFrame.x = frame2.x;
+    }
+    if (frame2.height > newFrame.height) {
+        newFrame.height = frame2.height;
+        newFrame.y = frame2.y;
+    }
+
+    return newFrame;
+}
+
+async function detectSafeCropFromMultipleParts(
+    path: string,
+    filmDurationInSecs: number,
+    limit: number = 24,
+    round: number = 2
+): Promise<Frame> {
+    if (filmDurationInSecs / 60 < 4) {
+        return detectSafeCrop(path, 0, filmDurationInSecs);
+    }
+
+    const leftStart = Math.floor(filmDurationInSecs * 0.1);
+    const midStart = Math.floor(filmDurationInSecs * 0.5);
+    const rightStart = Math.floor(filmDurationInSecs * 0.8);
+
+    const leftDuration = Math.min(midStart - leftStart, 60);
+    const midDuration = Math.min(rightStart - midStart, 60);
+    const rightDuration = Math.min(filmDurationInSecs - rightStart, 60);
+
+    const [leftFrame, midFrame, rightFrame] = await Promise.all([
+        detectSafeCrop(path, leftStart, leftDuration),
+        detectSafeCrop(path, midStart, midDuration),
+        detectSafeCrop(path, rightStart, rightDuration),
+    ]);
+
+    return maxLargestAxisOfFrame(
+        leftFrame,
+        maxLargestAxisOfFrame(midFrame, rightFrame)
+    );
 }
 
 async function writeCropToFileMetadata(
@@ -278,7 +327,10 @@ let videoInfo = await getVideoInfo(videoFile);
 info(`Resolution: ${videoInfo.width}x${videoInfo.height}`);
 info(`Length: ${secsToTime(videoInfo.duration)} hh:mm:ss`);
 
-let cropFrame = await detectSafeCrop(videoFile, 0, 60);
+let cropFrame = await detectSafeCropFromMultipleParts(
+    videoFile,
+    videoInfo.duration
+);
 let crop = calculateCrop(videoInfo, cropFrame);
 
 ok(`Crop:
