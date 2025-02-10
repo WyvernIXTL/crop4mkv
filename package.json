@@ -1,0 +1,17 @@
+{
+  "name": "crop4mkv",
+  "module": "index.ts",
+  "type": "module",
+  "author": {
+    "name": "Adam McKellar",
+    "email": "dev@mckellar.eu",
+    "url": "https://dev.mckellar.eu"
+  },
+  "license": "MPL-2.0",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
