@@ -88,9 +88,11 @@ foreach ($tool in $requiredTools) {
 }
 
 try {
+    Write-Host "================================================================================================================================================" -ForegroundColor White
+    Write-Host $AbsolutePathObj -ForegroundColor White
+
     # Check for existing crop info with mkvinfo.
     if (-not $OverWrite) {
-        Write-Host "========================================= `{ $Path `} ============================================" -ForegroundColor White
         $mkvinfoOutput = & mkvinfo.exe $AbsolutePath 2>&1
         if ($LASTEXITCODE -ne 0) {
             throw "mkvinfo failed with exit code $LASTEXITCODE."
