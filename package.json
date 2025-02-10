@@ -6,6 +6,10 @@
   "bin": {
     "crop4mkv": "./index.ts"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/WyvernIXTL/crop4mkv"
+  },
   "author": {
     "name": "Adam McKellar",
     "email": "dev@mckellar.eu",
