@@ -9,7 +9,6 @@
 import { $, env, ShellError } from "bun";
 import { parseArgs } from "util";
 import { resolve, isAbsolute } from "path";
-import type { text } from "stream/consumers";
 
 function error(message: string): void {
     console.write(
@@ -77,50 +76,6 @@ async function getAbsolutPath(path: string): Promise<string> {
     return resolve(await $`pwd`.text(), path);
 }
 
-async function cropFlagIsSet(path: string): Promise<boolean> {
-    const output = await $`mkvmerge -J ${path}`.json();
-    for (const track of output["tracks"]) {
-        if ("cropping" in track["properties"]) {
-            return true;
-        }
-    }
-    return false;
-}
-
-async function getVideoInfo(
-    path: string
-): Promise<{ width: number; height: number; duration: number }> {
-    const { output, exitCode, stderr } =
-        await $`ffprobe -v error -select_streams v:0 -show_entries stream=width,height,sample_aspect_ratio -show_entries format=duration -of json ${path}`
-            .nothrow()
-            .json();
-    if (exitCode != 0) {
-        error("ERROR (while executing ffprobe).");
-        error(stderr.toString());
-        process.exit(exitCode);
-    }
-
-    return {
-        width: output["streams"][0]["width"],
-        height: output["streams"][0]["height"],
-        duration: output["format"]["duration"],
-    };
-}
-
-function padNumberToString(num: number): string {
-    return `${num}`.padStart(2, "0");
-}
-
-function secsToTime(secs: number): string {
-    const hours = Math.floor(secs / 60 / 60);
-    const minutes = Math.floor((secs / 60) % 60);
-    const seconds = Math.floor(secs % 60);
-
-    return `${padNumberToString(hours)}:${padNumberToString(
-        minutes
-    )}:${padNumberToString(seconds)}`;
-}
-
 type Frame = {
     width: number;
     height: number;
@@ -135,13 +90,54 @@ type Crop = {
     right: number;
 };
 
-function calculateCrop(
-    video: {
-        width: number;
-        height: number;
-    },
-    frame: Frame
-): Crop {
+type VideoInfo = { width: number; height: number; duration: number };
+
+async function cropFlagIsSet(path: string): Promise<boolean> {
+    const output = await $`mkvmerge -J ${path}`.json().catch((e) => {
+        error("ERROR (while executing mkvmerge):");
+        console.error(e);
+        process.exit(1);
+    });
+    for (const track of output["tracks"]) {
+        if ("cropping" in track["properties"]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+async function getVideoInfo(path: string): Promise<VideoInfo> {
+    const output =
+        await $`ffprobe -v error -select_streams v:0 -show_entries stream=width,height,sample_aspect_ratio -show_entries format=duration -of json ${path}`
+            .json()
+            .catch((e) => {
+                error("ERROR (while executing ffprobe):");
+                console.error(e);
+                process.exit(1);
+            });
+
+    return {
+        width: output["streams"][0]["width"],
+        height: output["streams"][0]["height"],
+        duration: output["format"]["duration"],
+    };
+}
+
+function padNumberToString(num: number): string {
+    return `${num}`.padStart(2, "0");
+}
+
+function secsToTimeString(secs: number): string {
+    const hours = Math.floor(secs / 60 / 60);
+    const minutes = Math.floor((secs / 60) % 60);
+    const seconds = Math.floor(secs % 60);
+
+    return `${padNumberToString(hours)}:${padNumberToString(
+        minutes
+    )}:${padNumberToString(seconds)}`;
+}
+
+function calculateCrop(video: VideoInfo, frame: Frame): Crop {
     return {
         left: frame.x,
         top: frame.y,
@@ -157,15 +153,16 @@ async function detectSafeCrop(
     limit: number = 24,
     round: number = 2
 ): Promise<Frame> {
-    const start = secsToTime(startInSecs);
-    const duration = secsToTime(durationInSec);
-    const { stderr, exitCode } =
-        await $`ffmpeg -hide_banner -loglevel info -ss ${start} -skip_frame nokey -i "${path}" -vf "cropdetect=mode=black,cropdetect=limit=${limit},cropdetect=round=${round},cropdetect=skip=0,cropdetect=reset=1" -t ${duration} -f null -`.nothrow();
-    if (exitCode != 0) {
-        error("ERROR (while executing ffmpeg):");
-        error(stderr.toString());
-        process.exit(exitCode);
-    }
+    const start = secsToTimeString(startInSecs);
+    const duration = secsToTimeString(durationInSec);
+    const { stderr } =
+        await $`ffmpeg -hide_banner -loglevel info -ss ${start} -skip_frame nokey -i "${path}" -vf "cropdetect=mode=black,cropdetect=limit=${limit},cropdetect=round=${round},cropdetect=skip=0,cropdetect=reset=1" -t ${duration} -f null -`
+            .quiet()
+            .catch((e) => {
+                error("ERROR (while executing ffmpeg):");
+                console.error(e);
+                process.exit(1);
+            });
 
     if (!stderr) {
         errorAndExit("ffmpeg did not output anything.");
@@ -231,10 +228,6 @@ async function detectSafeCropFromMultipleParts(
     limit: number = 24,
     round: number = 2
 ): Promise<Frame> {
-    if (filmDurationInSecs / 60 < 4) {
-        return detectSafeCrop(path, 0, filmDurationInSecs);
-    }
-
     const leftStart = Math.floor(filmDurationInSecs * 0.1);
     const midStart = Math.floor(filmDurationInSecs * 0.5);
     const rightStart = Math.floor(filmDurationInSecs * 0.8);
@@ -244,9 +237,9 @@ async function detectSafeCropFromMultipleParts(
     const rightDuration = Math.min(filmDurationInSecs - rightStart, 60);
 
     const [leftFrame, midFrame, rightFrame] = await Promise.all([
-        detectSafeCrop(path, leftStart, leftDuration),
-        detectSafeCrop(path, midStart, midDuration),
-        detectSafeCrop(path, rightStart, rightDuration),
+        detectSafeCrop(path, leftStart, leftDuration, limit, round),
+        detectSafeCrop(path, midStart, midDuration, limit, round),
+        detectSafeCrop(path, rightStart, rightDuration, limit, round),
     ]);
 
     return maxLargestAxisOfFrame(
@@ -257,7 +250,7 @@ async function detectSafeCropFromMultipleParts(
 
 async function writeCropToFileMetadata(
     path: string,
-    crop: { left: number; top: number; right: number; bottom: number },
+    crop: Crop,
     dryrun: boolean = false
 ) {
     let command = `${$.escape(path)} --edit track:v1 `;
@@ -296,6 +289,13 @@ async function writeCropToFileMetadata(
 
     ok(`Write success!`);
 }
+
+//                 ███╗   ███╗ █████╗ ██╗███╗   ██╗
+//                 ████╗ ████║██╔══██╗██║████╗  ██║
+// █████╗█████╗    ██╔████╔██║███████║██║██╔██╗ ██║    █████╗█████╗
+// ╚════╝╚════╝    ██║╚██╔╝██║██╔══██║██║██║╚██╗██║    ╚════╝╚════╝
+//                 ██║ ╚═╝ ██║██║  ██║██║██║ ╚████║
+//                 ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═══╝
 
 checkIfToolsAreInPath();
 
@@ -354,7 +354,7 @@ if (!values["overwrite"] && (await cropFlagIsSet(videoFile))) {
 let videoInfo = await getVideoInfo(videoFile);
 
 info(`Resolution: ${videoInfo.width}x${videoInfo.height}`);
-info(`Length: ${secsToTime(videoInfo.duration)} hh:mm:ss`);
+info(`Length: ${secsToTimeString(videoInfo.duration)} hh:mm:ss`);
 
 let cropFrame = await detectSafeCropFromMultipleParts(
     videoFile,
