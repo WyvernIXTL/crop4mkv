@@ -90,8 +90,15 @@ async function cropFlagIsSet(path: string): Promise<boolean> {
 async function getVideoInfo(
     path: string
 ): Promise<{ width: number; height: number; duration: number }> {
-    const output =
-        await $`ffprobe -v error -select_streams v:0 -show_entries stream=width,height,sample_aspect_ratio -show_entries format=duration -of json ${path}`.json();
+    const { output, exitCode, stderr } =
+        await $`ffprobe -v error -select_streams v:0 -show_entries stream=width,height,sample_aspect_ratio -show_entries format=duration -of json ${path}`
+            .nothrow()
+            .json();
+    if (exitCode != 0) {
+        error("ERROR (while executing ffprobe).");
+        error(stderr.toString());
+        process.exit(exitCode);
+    }
 
     return {
         width: output["streams"][0]["width"],
@@ -152,8 +159,13 @@ async function detectSafeCrop(
 ): Promise<Frame> {
     const start = secsToTime(startInSecs);
     const duration = secsToTime(durationInSec);
-    const { stdout, stderr } =
-        await $`ffmpeg.exe -hide_banner -loglevel info -ss ${start} -skip_frame nokey -i "${path}" -vf "cropdetect=mode=black,cropdetect=limit=${limit},cropdetect=round=${round},cropdetect=skip=0,cropdetect=reset=1" -t ${duration} -f null -`.quiet();
+    const { stderr, exitCode } =
+        await $`ffmpeg -hide_banner -loglevel info -ss ${start} -skip_frame nokey -i "${path}" -vf "cropdetect=mode=black,cropdetect=limit=${limit},cropdetect=round=${round},cropdetect=skip=0,cropdetect=reset=1" -t ${duration} -f null -`.nothrow();
+    if (exitCode != 0) {
+        error("ERROR (while executing ffmpeg):");
+        error(stderr.toString());
+        process.exit(exitCode);
+    }
 
     if (!stderr) {
         errorAndExit("ffmpeg did not output anything.");
@@ -277,7 +289,8 @@ async function writeCropToFileMetadata(
         raw: command,
     }}`.nothrow();
     if (exitCode != 0) {
-        console.log(stderr.toString());
+        error("ERROR (while executing mkvpropedit):");
+        error(stderr.toString());
         process.exit(exitCode);
     }
 
@@ -319,7 +332,7 @@ Options:
 
 Copyright Adam McKellar <dev@mckellar.eu> 2025
 
-This Source Code Form is subject to the terms of the Mozilla Public
+This Program ('crop4mkv') is subject to the terms of the Mozilla Public
 License, v. 2.0. If a copy of the MPL was not distributed with this
 file, You can obtain one at https://mozilla.org/MPL/2.0/.
         `);
