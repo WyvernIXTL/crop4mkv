@@ -305,7 +305,23 @@ const { values, positionals } = parseArgs({
 
 if (values["help"] || !positionals[positionals.length - 1].endsWith("mkv")) {
     console.write(`
-    help
+crop4mkv
+
+Bun ts script that analyses crop margins of a video and sets the flags for an mkv.
+
+Usage: crop4mkv [Options] FILE_PATH
+
+Options:
+--dryrun      When set does not write tags to file.
+--overwrite   When set does not check if tags are allready set.
+--help        Shows this message.
+
+
+Copyright Adam McKellar <dev@mckellar.eu> 2025
+
+This Source Code Form is subject to the terms of the Mozilla Public
+License, v. 2.0. If a copy of the MPL was not distributed with this
+file, You can obtain one at https://mozilla.org/MPL/2.0/.
         `);
     process.exit(0);
 }
