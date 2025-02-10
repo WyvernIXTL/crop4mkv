@@ -51,3 +51,9 @@ scoop install extras/mkvtoolnix
 ```
 bun install -g crop4mkv
 ```
+
+## Images
+
+![Image showing dryrun](https://media.githubusercontent.com/media/WyvernIXTL/crop4mkv/refs/heads/master/images/1-fs8.png)
+![Image showing success](https://media.githubusercontent.com/media/WyvernIXTL/crop4mkv/refs/heads/master/images/2-fs8.png)
+![Image showing execution of allready done file](https://media.githubusercontent.com/media/WyvernIXTL/crop4mkv/refs/heads/master/images/3-fs8.png)
