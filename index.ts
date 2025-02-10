@@ -228,7 +228,15 @@ async function detectSafeCropFromMultipleParts(
     limit: number = 24,
     round: number = 2
 ): Promise<Frame> {
-    const leftStart = Math.floor(filmDurationInSecs * 0.1);
+    if (filmDurationInSecs < 60) {
+        return detectSafeCrop(path, 0, filmDurationInSecs);
+    }
+
+    let leftCheckWindowFactor = 0.1;
+    if (filmDurationInSecs / 60 < 3) {
+        leftCheckWindowFactor = 0.0;
+    }
+    const leftStart = Math.floor(filmDurationInSecs * leftCheckWindowFactor);
     const midStart = Math.floor(filmDurationInSecs * 0.5);
     const rightStart = Math.floor(filmDurationInSecs * 0.8);
 
