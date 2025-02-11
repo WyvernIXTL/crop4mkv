@@ -6,51 +6,48 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import { $ } from "bun";
+import { $, type ColorInput } from "bun";
 import { parseArgs } from "util";
 
-function error(message: string): void {
+function printWithCssColor<T extends { toString(): string }>(
+    message: T,
+    color: ColorInput
+): void {
     console.write(
-        `${Bun.color("red", "ansi")}${message}${Bun.color("white", "ansi")}\n`
+        `${Bun.color(color, "ansi")}${message.toString()}${Bun.color(
+            "white",
+            "ansi"
+        )}\n`
     );
 }
 
-function errorAndExit(message: string): never {
+function error<T extends { toString(): string }>(message: T): void {
+    printWithCssColor(message, "red");
+}
+
+function errorAndExit<T extends { toString(): string }>(message: T): never {
     error(message);
     process.exit(1);
 }
 
-function warn(message: string): void {
-    console.write(
-        `${Bun.color("yellow", "ansi")}${message}${Bun.color(
-            "white",
-            "ansi"
-        )}\n`
-    );
+function warn<T extends { toString(): string }>(message: T): void {
+    printWithCssColor(message, "yellow");
 }
 
-function info(message: string): void {
-    console.write(
-        `${Bun.color("cyan", "ansi")}${message}${Bun.color("white", "ansi")}\n`
-    );
+function info<T extends { toString(): string }>(message: T): void {
+    printWithCssColor(message, "cyan");
 }
 
-function ok(message: string): void {
-    console.write(
-        `${Bun.color("lightgreen", "ansi")}${message}${Bun.color(
-            "white",
-            "ansi"
-        )}\n`
-    );
+function ok<T extends { toString(): string }>(message: T): void {
+    printWithCssColor(message, "lightgreen");
 }
 
-function purple(message: string): void {
-    console.write(
-        `${Bun.color("mediumorchid", "ansi")}${message}${Bun.color(
-            "white",
-            "ansi"
-        )}\n`
-    );
+function purple<T extends { toString(): string }>(message: T): void {
+    printWithCssColor(message, "mediumorchid");
+}
+
+function dbg<T extends { toString(): string }>(message: T): void {
+    printWithCssColor(message, "lavender");
 }
 
 function checkIfToolsAreInPath(): void {
@@ -89,6 +86,11 @@ type Crop = {
     bottom: number;
     left: number;
     right: number;
+};
+
+type Axis = {
+    length: number;
+    offset: number;
 };
 
 type VideoInfo = { width: number; height: number; duration: number };
@@ -145,12 +147,79 @@ function calculateCrop(video: VideoInfo, frame: Frame): Crop {
     };
 }
 
+function maxLargestAxis(axisArray: Axis[]): Axis {
+    if (!(axisArray.length > 0))
+        errorAndExit(`ERROR: No axis passed for maxing.`);
+    let result: Axis = { ...axisArray[0] };
+    for (const axis of axisArray) {
+        if (axis.length > result.length) {
+            result.length = axis.length;
+            result.offset = axis.offset;
+        }
+    }
+    return result;
+}
+
+function maxLargestAxisOfFrameList(frameList: Frame[]): Frame {
+    if (!(frameList.length > 0))
+        errorAndExit(`ERROR: No frames passed for maxing.`);
+    let result: Frame = { ...frameList[0] };
+    for (const frame of frameList) {
+        if (frame.width > result.width) {
+            result.width = frame.width;
+            result.x = frame.x;
+        }
+        if (frame.height > result.height) {
+            result.height = frame.height;
+            result.y = frame.y;
+        }
+    }
+    return result;
+}
+
+function splitFrameArrayByAxis(frames: Frame[]): {
+    xAxisArray: Axis[];
+    yAxisArray: Axis[];
+} {
+    return {
+        xAxisArray: frames.map<Axis>((frame) => {
+            return { length: frame.width, offset: frame.x };
+        }),
+        yAxisArray: frames.map((frame) => {
+            return { length: frame.height, offset: frame.y };
+        }),
+    };
+}
+
+function quantileOfAxis(sortedAxis: Axis[], percentage: number): number {
+    const index = Math.floor(sortedAxis.length * percentage);
+    return sortedAxis[index].length;
+}
+
+function filterOutliersForAxis(axis: Axis[]): Axis[] {
+    axis.sort((a, b) => a.length - b.length);
+    const q1 = quantileOfAxis(axis, 0.25);
+    const q3 = quantileOfAxis(axis, 0.75);
+    const range = q3 - q1;
+    const lowerBound = q1 - 1.5 * range;
+    const upperBound = q3 + 1.5 * range;
+
+    let result: Axis[] = [];
+    for (const value of axis) {
+        if (value.length >= lowerBound && value.length <= upperBound) {
+            result.push(value);
+        }
+    }
+    return result;
+}
+
 async function detectSafeCrop(
     path: string,
     startInSecs: number,
     durationInSec: number,
     limit: number = 24,
-    round: number = 2
+    round: number = 2,
+    verbose: boolean = false
 ): Promise<Frame> {
     const start = secsToTimeString(startInSecs);
     const duration = secsToTimeString(durationInSec);
@@ -170,12 +239,7 @@ async function detectSafeCrop(
 
     let count = 0;
 
-    let frame = {
-        width: 0,
-        height: 0,
-        x: 0,
-        y: 0,
-    };
+    let frames: Frame[] = [];
 
     for (let line of stderr.toString().split("\n")) {
         const match = line.match(cropRegex);
@@ -188,70 +252,121 @@ async function detectSafeCrop(
         const x = parseInt(match.groups.x);
         const y = parseInt(match.groups.y);
 
-        if (width > frame.width) {
-            frame.width = width;
-            frame.x = x;
-        }
-        if (height > frame.height) {
-            frame.height = height;
-            frame.y = y;
-        }
+        frames.push({
+            width: parseInt(match.groups.width),
+            height: parseInt(match.groups.height),
+            x: parseInt(match.groups.x),
+            y: parseInt(match.groups.y),
+        });
 
         count += 1;
     }
 
     info(`Checked ${count} frames.`);
 
-    return frame;
+    const { xAxisArray, yAxisArray } = splitFrameArrayByAxis(frames);
+    const filteredXAxisArray = filterOutliersForAxis(xAxisArray);
+    const filteredYAxisArray = filterOutliersForAxis(yAxisArray);
+
+    if (verbose) {
+        dbg(
+            `Filtered X Axis Crop: ${
+                xAxisArray.length - filteredXAxisArray.length
+            }/${xAxisArray.length}`
+        );
+        dbg(
+            `Filtered Y Axis Crop: ${
+                yAxisArray.length - filteredYAxisArray.length
+            }/${yAxisArray.length}`
+        );
+    }
+
+    const maxedXAxis = maxLargestAxis(filteredXAxisArray);
+    const maxedYAxis = maxLargestAxis(filteredYAxisArray);
+
+    return {
+        width: maxedXAxis.length,
+        height: maxedYAxis.length,
+        x: maxedXAxis.offset,
+        y: maxedYAxis.offset,
+    };
 }
 
-function maxLargestAxisOfFrame(frame1: Frame, frame2: Frame): Frame {
-    let newFrame: Frame = { ...frame1 };
+function cropToString(crop: Crop): string {
+    return `Crop:
+  - left:   ${crop.left}
+  - top:    ${crop.top}
+  - right:  ${crop.right}
+  - bottom: ${crop.bottom}`;
+}
 
-    if (frame2.width > newFrame.width) {
-        newFrame.width = frame2.width;
-        newFrame.x = frame2.x;
-    }
-    if (frame2.height > newFrame.height) {
-        newFrame.height = frame2.height;
-        newFrame.y = frame2.y;
+function calculateStartAndDuration(
+    filmDurationInSecs: number,
+    parts: number,
+    maxDurationPerPartInSecs: number
+): { start: number; duration: number }[] {
+    let partLength = Math.floor(filmDurationInSecs / parts);
+    let result: { start: number; duration: number }[] = [];
+    for (let i = 0; i < parts; i += 1) {
+        const start = i * partLength;
+        result.push({
+            start: start,
+            duration: Math.min(
+                (i + 1) * partLength - start,
+                maxDurationPerPartInSecs
+            ),
+        });
     }
 
-    return newFrame;
+    return result;
 }
 
 async function detectSafeCropFromMultipleParts(
     path: string,
     filmDurationInSecs: number,
+    parts: number = 3,
+    maxDurationPerPartInSecs: number = 60,
     limit: number = 24,
-    round: number = 2
+    round: number = 2,
+    verbose?: { videoInfo: VideoInfo }
 ): Promise<Frame> {
-    if (filmDurationInSecs < 60) {
-        return detectSafeCrop(path, 0, filmDurationInSecs);
+    if (filmDurationInSecs < maxDurationPerPartInSecs) {
+        return detectSafeCrop(
+            path,
+            0,
+            filmDurationInSecs,
+            limit,
+            round,
+            !!verbose
+        );
     }
 
-    let leftCheckWindowFactor = 0.1;
-    if (filmDurationInSecs / 60 < 3) {
-        leftCheckWindowFactor = 0.0;
-    }
-    const leftStart = Math.floor(filmDurationInSecs * leftCheckWindowFactor);
-    const midStart = Math.floor(filmDurationInSecs * 0.5);
-    const rightStart = Math.floor(filmDurationInSecs * 0.8);
-
-    const leftDuration = Math.min(midStart - leftStart, 60);
-    const midDuration = Math.min(rightStart - midStart, 60);
-    const rightDuration = Math.min(filmDurationInSecs - rightStart, 60);
-
-    const [leftFrame, midFrame, rightFrame] = await Promise.all([
-        detectSafeCrop(path, leftStart, leftDuration, limit, round),
-        detectSafeCrop(path, midStart, midDuration, limit, round),
-        detectSafeCrop(path, rightStart, rightDuration, limit, round),
-    ]);
-
-    return maxLargestAxisOfFrame(
-        leftFrame,
-        maxLargestAxisOfFrame(midFrame, rightFrame)
+    const framesStartAndDuration = calculateStartAndDuration(
+        filmDurationInSecs,
+        parts,
+        maxDurationPerPartInSecs
     );
+
+    let resultsPromise: Promise<Frame>[] = [];
+
+    for (const { start, duration } of framesStartAndDuration) {
+        resultsPromise.push(
+            detectSafeCrop(path, start, duration, limit, round, !!verbose)
+        );
+    }
+
+    let results = await Promise.all(resultsPromise);
+
+    if (verbose) {
+        dbg(`====== Frames ======`);
+        for (let i = 0; i < framesStartAndDuration.length; i += 1) {
+            dbg(`=== Frame ===`);
+            dbg(`Start: ${secsToTimeString(framesStartAndDuration[i].start)}`);
+            dbg(cropToString(calculateCrop(verbose.videoInfo, results[i])));
+        }
+    }
+
+    return maxLargestAxisOfFrameList(results);
 }
 
 async function writeCropToFileMetadata(
@@ -291,7 +406,7 @@ async function writeCropToFileMetadata(
         .quiet()
         .catch((e) => {
             error("ERROR (while executing mkvpropedit):");
-            errorAndExit(stderr.toString());
+            errorAndExit(e.stderr.toString());
         });
 
     ok(`Write success!`);
@@ -321,6 +436,21 @@ const { values, positionals } = parseArgs({
         overwrite: {
             type: "boolean",
         },
+        verbose: {
+            type: "boolean",
+        },
+        limit: {
+            type: "string",
+            default: "24",
+        },
+        parts: {
+            type: "string",
+            default: "3",
+        },
+        maxduration: {
+            type: "string",
+            default: "60",
+        },
     },
     strict: true,
     allowPositionals: true,
@@ -337,7 +467,11 @@ Usage: crop4mkv [Options] FILE_PATH
 Options:
 --dryrun      When set does not write tags to file.
 --overwrite   When set does not check if tags are allready set.
+--limit       Sets the value of a pixel where it is detected as black if lower. (Default: 24)
+--parts       At how many points do you want to check your video? The more the better is the coverage.
+--maxduration What is the maximum duration to check per point.
 --help        Shows this message.
+--verbose     Prints information for debugging.
 
 
 Copyright Adam McKellar <dev@mckellar.eu> 2025
@@ -368,14 +502,15 @@ info(`Length: ${secsToTimeString(videoInfo.duration)} hh:mm:ss`);
 
 let cropFrame = await detectSafeCropFromMultipleParts(
     videoFilePath,
-    videoInfo.duration
+    videoInfo.duration,
+    3,
+    60,
+    parseInt(values.limit),
+    undefined,
+    values.verbose ? { videoInfo: videoInfo } : undefined
 );
 let crop = calculateCrop(videoInfo, cropFrame);
 
-ok(`Crop:
-  - left:   ${crop.left}
-  - top:    ${crop.top}
-  - right:  ${crop.right}
-  - bottom: ${crop.bottom}`);
+ok(cropToString(crop));
 
 writeCropToFileMetadata(videoFilePath, crop, values.dryrun);
