@@ -213,6 +213,38 @@ function filterOutliersForAxis(axis: Axis[]): Axis[] {
     return result;
 }
 
+function filterOutliersForFramesAndReturnMaxFrame(
+    frames: Frame[],
+    verbose: boolean = false
+): Frame {
+    const { xAxisArray, yAxisArray } = splitFrameArrayByAxis(frames);
+    const filteredXAxisArray = filterOutliersForAxis(xAxisArray);
+    const filteredYAxisArray = filterOutliersForAxis(yAxisArray);
+
+    if (verbose) {
+        dbg(
+            `Filtered X Axis Crop: ${
+                xAxisArray.length - filteredXAxisArray.length
+            }/${xAxisArray.length}`
+        );
+        dbg(
+            `Filtered Y Axis Crop: ${
+                yAxisArray.length - filteredYAxisArray.length
+            }/${yAxisArray.length}`
+        );
+    }
+
+    const maxedXAxis = maxLargestAxis(filteredXAxisArray);
+    const maxedYAxis = maxLargestAxis(filteredYAxisArray);
+
+    return {
+        width: maxedXAxis.length,
+        height: maxedYAxis.length,
+        x: maxedXAxis.offset,
+        y: maxedYAxis.offset,
+    };
+}
+
 async function detectSafeCrop(
     path: string,
     startInSecs: number,
@@ -264,32 +296,7 @@ async function detectSafeCrop(
 
     info(`Checked ${count} frames.`);
 
-    const { xAxisArray, yAxisArray } = splitFrameArrayByAxis(frames);
-    const filteredXAxisArray = filterOutliersForAxis(xAxisArray);
-    const filteredYAxisArray = filterOutliersForAxis(yAxisArray);
-
-    if (verbose) {
-        dbg(
-            `Filtered X Axis Crop: ${
-                xAxisArray.length - filteredXAxisArray.length
-            }/${xAxisArray.length}`
-        );
-        dbg(
-            `Filtered Y Axis Crop: ${
-                yAxisArray.length - filteredYAxisArray.length
-            }/${yAxisArray.length}`
-        );
-    }
-
-    const maxedXAxis = maxLargestAxis(filteredXAxisArray);
-    const maxedYAxis = maxLargestAxis(filteredYAxisArray);
-
-    return {
-        width: maxedXAxis.length,
-        height: maxedYAxis.length,
-        x: maxedXAxis.offset,
-        y: maxedYAxis.offset,
-    };
+    return filterOutliersForFramesAndReturnMaxFrame(frames, verbose);
 }
 
 function cropToString(crop: Crop): string {
@@ -328,6 +335,7 @@ async function detectSafeCropFromMultipleParts(
     maxDurationPerPartInSecs: number = 60,
     limit: number = 24,
     round: number = 2,
+    filterOutlierForParts: boolean = false,
     verbose?: { videoInfo: VideoInfo }
 ): Promise<Frame> {
     if (filmDurationInSecs < maxDurationPerPartInSecs) {
@@ -355,7 +363,7 @@ async function detectSafeCropFromMultipleParts(
         );
     }
 
-    let results = await Promise.all(resultsPromise);
+    const results = await Promise.all(resultsPromise);
 
     if (verbose) {
         dbg(`====== Frames ======`);
@@ -366,7 +374,11 @@ async function detectSafeCropFromMultipleParts(
         }
     }
 
-    return maxLargestAxisOfFrameList(results);
+    if (filterOutlierForParts) {
+        return filterOutliersForFramesAndReturnMaxFrame(results, !!verbose);
+    } else {
+        return maxLargestAxisOfFrameList(results);
+    }
 }
 
 async function writeCropToFileMetadata(
@@ -445,11 +457,14 @@ const { values, positionals } = parseArgs({
         },
         parts: {
             type: "string",
-            default: "3",
+            default: "6",
         },
         maxduration: {
             type: "string",
             default: "60",
+        },
+        rmoutlier: {
+            type: "boolean",
         },
     },
     strict: true,
@@ -467,11 +482,21 @@ Usage: crop4mkv [Options] FILE_PATH
 Options:
 --dryrun      When set does not write tags to file.
 --overwrite   When set does not check if tags are allready set.
+--rmoutlier   Use outlier filtering for parts as well. This might result in some scenes being overly cropped.
 --limit       Sets the value of a pixel where it is detected as black if lower. (Default: 24)
---parts       At how many points do you want to check your video? The more the better is the coverage.
---maxduration What is the maximum duration to check per point.
+--parts       At how many points do you want to check your video? The more the better is the coverage. (Default: 6)
+--maxduration What is the maximum duration to check per point. (Default: 60)
 --help        Shows this message.
 --verbose     Prints information for debugging.
+
+Examples:
+
+crop4mkv --dryrun --overwrite movie.mkv // checks what crop4mkv would do
+
+crop4mkv --rmoutlier movie.mkv // Sometimes there are movies where only a few scenes are not 21:9 but 16:9. 
+// Setting this option might result in some scenes being more cropped than wanted.
+
+crop4mkv --parts 2 --maxduration 30 movie.mkv // slightly faster, as less video is checked
 
 
 Copyright Adam McKellar <dev@mckellar.eu> 2025
@@ -503,10 +528,11 @@ info(`Length: ${secsToTimeString(videoInfo.duration)} hh:mm:ss`);
 let cropFrame = await detectSafeCropFromMultipleParts(
     videoFilePath,
     videoInfo.duration,
-    3,
-    60,
+    parseInt(values.parts),
+    parseInt(values.maxduration),
     parseInt(values.limit),
     undefined,
+    values.rmoutlier,
     values.verbose ? { videoInfo: videoInfo } : undefined
 );
 let crop = calculateCrop(videoInfo, cropFrame);
