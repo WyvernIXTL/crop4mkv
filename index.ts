@@ -284,14 +284,15 @@ async function writeCropToFileMetadata(
         return;
     }
 
-    let { stderr, exitCode } = await $`mkvpropedit ${{
+    let { stderr } = await $`mkvpropedit ${{
         raw: command,
-    }}`.nothrow();
-    if (exitCode != 0) {
-        error("ERROR (while executing mkvpropedit):");
-        error(stderr.toString());
-        process.exit(exitCode);
-    }
+    }}`
+        .nothrow()
+        .quiet()
+        .catch((e) => {
+            error("ERROR (while executing mkvpropedit):");
+            errorAndExit(stderr.toString());
+        });
 
     ok(`Write success!`);
 }
