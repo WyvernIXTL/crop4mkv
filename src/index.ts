@@ -421,4 +421,16 @@ async function cropFile(path: string) {
     writeCropToFileMetadata(path, crop, opts.dryrun);
 }
 
-await cropFile(program.args[0]);
+try {
+    const path = await getAbsolutPath(program.args[0]);
+    await cropFile(path);
+} catch (e) {
+    if (e instanceof InternalError) {
+        error(e.message);
+        if (e.cause) {
+            error(e.cause);
+        }
+    } else {
+        throw e;
+    }
+}
