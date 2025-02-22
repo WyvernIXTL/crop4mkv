@@ -9,46 +9,21 @@
 import { $, type ColorInput } from "bun";
 import { parseArgs } from "util";
 
-function printWithCssColor<T extends { toString(): string }>(
-    message: T,
-    color: ColorInput
-): void {
-    console.write(
-        `${Bun.color(color, "ansi")}${message.toString()}${Bun.color(
-            "white",
-            "ansi"
-        )}\n`
-    );
-}
-
-function error<T extends { toString(): string }>(message: T): void {
-    printWithCssColor(message, "red");
-}
-
-function errorAndExit<T extends { toString(): string }>(message: T): never {
-    error(message);
-    process.exit(1);
-}
-
-function warn<T extends { toString(): string }>(message: T): void {
-    printWithCssColor(message, "yellow");
-}
-
-function info<T extends { toString(): string }>(message: T): void {
-    printWithCssColor(message, "cyan");
-}
-
-function ok<T extends { toString(): string }>(message: T): void {
-    printWithCssColor(message, "lightgreen");
-}
-
-function purple<T extends { toString(): string }>(message: T): void {
-    printWithCssColor(message, "mediumorchid");
-}
-
-function dbg<T extends { toString(): string }>(message: T): void {
-    printWithCssColor(message, "lavender");
-}
+import { InternalError, InternalErrorKind } from "./error";
+import {
+    cropToString,
+    dbg,
+    error,
+    errorAndExit,
+    info,
+    ok,
+    purple,
+    warn,
+    writeSeparator,
+} from "./printing";
+import { secsToTimeString } from "./helper";
+import { Dir } from "fs";
+import { Direction, type Axis, type Crop, type VideoInfo } from "./types";
 
 function checkIfToolsAreInPath(): void {
     const tools = ["mkvpropedit", "ffprobe", "ffmpeg"];
@@ -59,63 +34,31 @@ function checkIfToolsAreInPath(): void {
     }
 }
 
-function writeSeparator(): void {
-    const width = process.stdout.columns || 80;
-    console.write("=".repeat(width) + "\n");
-}
-
 async function getAbsolutPath(path: string): Promise<string> {
     const videoFile = await Bun.file(path);
 
     if (!(await videoFile.exists()) || !videoFile.name) {
-        errorAndExit(`ERROR: File does not exist: '${videoFile.name || path}'`);
+        throw new InternalError(
+            InternalErrorKind.IoError,
+            `ERROR: File does not exist: '${videoFile.name || path}'`
+        );
     }
 
     return videoFile.name;
 }
 
-type Frame = {
-    width: number;
-    height: number;
-    x: number;
-    y: number;
-};
-
-type Crop = {
-    top: number;
-    bottom: number;
-    left: number;
-    right: number;
-};
-
-type Axis = {
-    length: number;
-    offset: number;
-};
-
-type VideoInfo = { width: number; height: number; duration: number };
-
-async function cropFlagIsSet(path: string): Promise<boolean> {
-    const output = await $`mkvmerge -J ${path}`.json().catch((e) => {
-        error("ERROR (while executing mkvmerge):");
-        errorAndExit(e.stdout.toString());
-    });
-    for (const track of output["tracks"]) {
-        if ("cropping" in track["properties"]) {
-            return true;
-        }
-    }
-    return false;
-}
-
 async function getVideoInfo(path: string): Promise<VideoInfo> {
-    const output =
-        await $`ffprobe -v error -select_streams v:0 -show_entries stream=width,height,sample_aspect_ratio -show_entries format=duration -of json ${path}`
-            .json()
-            .catch((e) => {
-                error("ERROR (while executing ffprobe):");
-                errorAndExit(e.stderr.toString());
-            });
+    let output;
+    try {
+        output =
+            await $`ffprobe -v error -select_streams v:0 -show_entries stream=width,height,sample_aspect_ratio -show_entries format=duration -of json ${path}`.json();
+    } catch (e) {
+        throw new InternalError(
+            InternalErrorKind.ExecutionFailed,
+            "ERROR (while executing ffprobe)",
+            e
+        );
+    }
 
     return {
         width: output["streams"][0]["width"],
@@ -124,32 +67,40 @@ async function getVideoInfo(path: string): Promise<VideoInfo> {
     };
 }
 
-function padNumberToString(num: number): string {
-    return `${num}`.padStart(2, "0");
+async function cropFlagIsSet(path: string): Promise<boolean> {
+    let output;
+    try {
+        output = await $`mkvmerge -J ${path}`.json();
+    } catch (e) {
+        throw new InternalError(
+            InternalErrorKind.ExecutionFailed,
+            "ERROR (while executing mkvmerge)",
+            e
+        );
+    }
+    for (const track of output["tracks"]) {
+        if ("cropping" in track["properties"]) {
+            return true;
+        }
+    }
+    return false;
 }
 
-function secsToTimeString(secs: number): string {
-    const hours = Math.floor(secs / 60 / 60);
-    const minutes = Math.floor((secs / 60) % 60);
-    const seconds = Math.floor(secs % 60);
-
-    return `${padNumberToString(hours)}:${padNumberToString(
-        minutes
-    )}:${padNumberToString(seconds)}`;
-}
-
-function calculateCrop(video: VideoInfo, frame: Frame): Crop {
+function calculateCrop(video: VideoInfo, xAxis: Axis, yAxis: Axis): Crop {
+    if (xAxis.direction !== Direction.X || yAxis.direction !== Direction.Y) {
+        throw new InternalError(InternalErrorKind.WrongAxis);
+    }
     return {
-        left: frame.x,
-        top: frame.y,
-        right: video.width - (frame.width + frame.x),
-        bottom: video.height - (frame.height + frame.y),
+        left: xAxis.offset,
+        top: yAxis.offset,
+        right: video.width - (xAxis.length + xAxis.offset),
+        bottom: video.height - (yAxis.length + yAxis.offset),
     };
 }
 
 function maxLargestAxis(axisArray: Axis[]): Axis {
-    if (!(axisArray.length > 0))
-        errorAndExit(`ERROR: No axis passed for maxing.`);
+    if (axisArray.length === 0)
+        throw new InternalError(InternalErrorKind.MissingSamples);
     let result: Axis = { ...axisArray[0] };
     for (const axis of axisArray) {
         if (axis.length > result.length) {
@@ -160,43 +111,12 @@ function maxLargestAxis(axisArray: Axis[]): Axis {
     return result;
 }
 
-function maxLargestAxisOfFrameList(frameList: Frame[]): Frame {
-    if (!(frameList.length > 0))
-        errorAndExit(`ERROR: No frames passed for maxing.`);
-    let result: Frame = { ...frameList[0] };
-    for (const frame of frameList) {
-        if (frame.width > result.width) {
-            result.width = frame.width;
-            result.x = frame.x;
-        }
-        if (frame.height > result.height) {
-            result.height = frame.height;
-            result.y = frame.y;
-        }
-    }
-    return result;
-}
-
-function splitFrameArrayByAxis(frames: Frame[]): {
-    xAxisArray: Axis[];
-    yAxisArray: Axis[];
-} {
-    return {
-        xAxisArray: frames.map<Axis>((frame) => {
-            return { length: frame.width, offset: frame.x };
-        }),
-        yAxisArray: frames.map((frame) => {
-            return { length: frame.height, offset: frame.y };
-        }),
-    };
-}
-
 function quantileOfAxis(sortedAxis: Axis[], percentage: number): number {
     const index = Math.floor(sortedAxis.length * percentage);
     return sortedAxis[index].length;
 }
 
-function filterOutliersForAxis(axis: Axis[]): Axis[] {
+function filterAxis(axis: Axis[]): Axis[] {
     axis.sort((a, b) => a.length - b.length);
     const q1 = quantileOfAxis(axis, 0.25);
     const q3 = quantileOfAxis(axis, 0.75);
@@ -213,65 +133,39 @@ function filterOutliersForAxis(axis: Axis[]): Axis[] {
     return result;
 }
 
-function filterOutliersForFramesAndReturnMaxFrame(
-    frames: Frame[],
-    verbose: boolean = false
-): Frame {
-    const { xAxisArray, yAxisArray } = splitFrameArrayByAxis(frames);
-    const filteredXAxisArray = filterOutliersForAxis(xAxisArray);
-    const filteredYAxisArray = filterOutliersForAxis(yAxisArray);
-
-    if (verbose) {
-        dbg(
-            `Filtered X Axis Crop: ${
-                xAxisArray.length - filteredXAxisArray.length
-            }/${xAxisArray.length}`
-        );
-        dbg(
-            `Filtered Y Axis Crop: ${
-                yAxisArray.length - filteredYAxisArray.length
-            }/${yAxisArray.length}`
-        );
-    }
-
-    const maxedXAxis = maxLargestAxis(filteredXAxisArray);
-    const maxedYAxis = maxLargestAxis(filteredYAxisArray);
-
-    return {
-        width: maxedXAxis.length,
-        height: maxedYAxis.length,
-        x: maxedXAxis.offset,
-        y: maxedYAxis.offset,
-    };
-}
-
-async function detectSafeCrop(
+async function samplesForSection(
     path: string,
     startInSecs: number,
     durationInSec: number,
     limit: number = 24,
     round: number = 2,
     verbose: boolean = false
-): Promise<Frame> {
+): Promise<Axis[]> {
     const start = secsToTimeString(startInSecs);
     const duration = secsToTimeString(durationInSec);
     const { stderr } =
         await $`ffmpeg -hide_banner -loglevel info -ss ${start} -skip_frame nokey -i "${path}" -vf "cropdetect=mode=black,cropdetect=limit=${limit},cropdetect=round=${round},cropdetect=skip=0,cropdetect=reset=1" -t ${duration} -f null -`
             .quiet()
             .catch((e) => {
-                error("ERROR (while executing ffmpeg):");
-                errorAndExit(e.stderr.toString());
+                throw new InternalError(
+                    InternalErrorKind.ExecutionFailed,
+                    "ERROR (while executing ffmpeg)",
+                    e
+                );
             });
 
     if (!stderr) {
-        errorAndExit("ffmpeg did not output anything.");
+        throw new InternalError(
+            InternalErrorKind.MissingSamples,
+            "ffmpeg did not output anything."
+        );
     }
 
     const cropRegex = /.*crop=(?<width>\d+):(?<height>\d+):(?<x>\d+):(?<y>\d+)/;
 
     let count = 0;
 
-    let frames: Frame[] = [];
+    let samples: Axis[] = [];
 
     for (let line of stderr.toString().split("\n")) {
         const match = line.match(cropRegex);
@@ -284,27 +178,25 @@ async function detectSafeCrop(
         const x = parseInt(match.groups.x);
         const y = parseInt(match.groups.y);
 
-        frames.push({
-            width: parseInt(match.groups.width),
-            height: parseInt(match.groups.height),
-            x: parseInt(match.groups.x),
-            y: parseInt(match.groups.y),
+        samples.push({
+            length: parseInt(match.groups.width),
+            offset: parseInt(match.groups.x),
+            direction: Direction.X,
+        });
+        samples.push({
+            length: parseInt(match.groups.height),
+            offset: parseInt(match.groups.y),
+            direction: Direction.Y,
         });
 
         count += 1;
     }
 
-    info(`Checked ${count} frames.`);
+    if (verbose) {
+        info(`Extracted crop of ${count} frames.`);
+    }
 
-    return filterOutliersForFramesAndReturnMaxFrame(frames, verbose);
-}
-
-function cropToString(crop: Crop): string {
-    return `Crop:
-  - left:   ${crop.left}
-  - top:    ${crop.top}
-  - right:  ${crop.right}
-  - bottom: ${crop.bottom}`;
+    return samples;
 }
 
 function calculateStartAndDuration(
@@ -328,57 +220,73 @@ function calculateStartAndDuration(
     return result;
 }
 
+function cropFromMultiAxis(
+    videoInfo: VideoInfo,
+    samples: Axis[],
+    filter: boolean,
+    verbose?: boolean
+): Crop {
+    const xAxis = samples.filter((sample) => sample.direction == Direction.X);
+    const yAxis = samples.filter((sample) => sample.direction == Direction.Y);
+    const xFiltered = filter ? filterAxis(xAxis) : xAxis;
+    const yFiltered = filter ? filterAxis(yAxis) : yAxis;
+    if (verbose) {
+        info(
+            `Filtered out ${
+                xAxis.length - xFiltered.length
+            } samples from x axis.`
+        );
+        info(
+            `Filtered out ${
+                yAxis.length - yFiltered.length
+            } samples from y axis.`
+        );
+    }
+    const xMax = maxLargestAxis(xFiltered);
+    const yMax = maxLargestAxis(yFiltered);
+    return calculateCrop(videoInfo, xMax, yMax);
+}
+
 async function detectSafeCropFromMultipleParts(
     path: string,
-    filmDurationInSecs: number,
+    videoInfo: VideoInfo,
     parts: number = 3,
     maxDurationPerPartInSecs: number = 60,
     limit: number = 24,
     round: number = 2,
-    filterOutlierForParts: boolean = false,
+    filter: boolean = true,
     verbose?: { videoInfo: VideoInfo }
-): Promise<Frame> {
-    if (filmDurationInSecs < maxDurationPerPartInSecs) {
-        return detectSafeCrop(
+): Promise<Crop> {
+    if (videoInfo.duration < maxDurationPerPartInSecs) {
+        const samples = await samplesForSection(
             path,
             0,
-            filmDurationInSecs,
+            videoInfo.duration,
             limit,
             round,
             !!verbose
         );
+        return cropFromMultiAxis(videoInfo, samples, filter, !!verbose);
     }
 
     const framesStartAndDuration = calculateStartAndDuration(
-        filmDurationInSecs,
+        videoInfo.duration,
         parts,
         maxDurationPerPartInSecs
     );
 
-    let resultsPromise: Promise<Frame>[] = [];
+    let samplesPromise: Promise<Axis[]>[] = [];
 
     for (const { start, duration } of framesStartAndDuration) {
-        resultsPromise.push(
-            detectSafeCrop(path, start, duration, limit, round, !!verbose)
+        samplesPromise.push(
+            samplesForSection(path, start, duration, limit, round, !!verbose)
         );
     }
 
-    const results = await Promise.all(resultsPromise);
+    const results = await Promise.all(samplesPromise);
+    const samples = results.flat(1);
 
-    if (verbose) {
-        dbg(`====== Frames ======`);
-        for (let i = 0; i < framesStartAndDuration.length; i += 1) {
-            dbg(`=== Frame ===`);
-            dbg(`Start: ${secsToTimeString(framesStartAndDuration[i].start)}`);
-            dbg(cropToString(calculateCrop(verbose.videoInfo, results[i])));
-        }
-    }
-
-    if (filterOutlierForParts) {
-        return filterOutliersForFramesAndReturnMaxFrame(results, !!verbose);
-    } else {
-        return maxLargestAxisOfFrameList(results);
-    }
+    return cropFromMultiAxis(videoInfo, samples, filter, !!verbose);
 }
 
 async function writeCropToFileMetadata(
@@ -417,8 +325,11 @@ async function writeCropToFileMetadata(
         .nothrow()
         .quiet()
         .catch((e) => {
-            error("ERROR (while executing mkvpropedit):");
-            errorAndExit(e.stderr.toString());
+            throw new InternalError(
+                InternalErrorKind.ExecutionFailed,
+                "ERROR (while executing mkvpropedit)",
+                e
+            );
         });
 
     ok(`Write success!`);
@@ -520,14 +431,14 @@ if (!values["overwrite"] && (await cropFlagIsSet(videoFilePath))) {
     process.exit(0);
 }
 
-let videoInfo = await getVideoInfo(videoFilePath);
+const videoInfo = await getVideoInfo(videoFilePath);
 
 info(`Resolution: ${videoInfo.width}x${videoInfo.height}`);
 info(`Length: ${secsToTimeString(videoInfo.duration)} hh:mm:ss`);
 
-let cropFrame = await detectSafeCropFromMultipleParts(
+const crop = await detectSafeCropFromMultipleParts(
     videoFilePath,
-    videoInfo.duration,
+    videoInfo,
     parseInt(values.parts),
     parseInt(values.maxduration),
     parseInt(values.limit),
@@ -535,7 +446,6 @@ let cropFrame = await detectSafeCropFromMultipleParts(
     values.rmoutlier,
     values.verbose ? { videoInfo: videoInfo } : undefined
 );
-let crop = calculateCrop(videoInfo, cropFrame);
 
 ok(cropToString(crop));
 
