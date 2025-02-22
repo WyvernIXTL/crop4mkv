@@ -2,6 +2,10 @@
 
 **Bun TS script that analyzes crop margins of a video and sets the flags for an MKV.**
 
+[![NPM Version](https://img.shields.io/npm/v/crop4mkv)](https://www.npmjs.com/package/crop4mkv)
+![GitHub License](https://img.shields.io/github/license/WyvernIXTL/crop4mkv)
+
+
 * This script searches with [`ffmpeg` `cropdetect`](https://ffmpeg.org/ffmpeg-filters.html#cropdetect) at 3 different points in the video to check the crop.
 * It then takes the crop per axis that clips the fewest pixels (the safe crop).
 * The crop is then saved into the MKV flags with [MKVToolNix](https://mkvtoolnix.download/) without touching the video stream.
