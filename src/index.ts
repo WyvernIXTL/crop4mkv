@@ -7,7 +7,7 @@
  */
 
 import { $ } from "bun";
-import { readdir, stat } from "node:fs/promises";
+import { stat } from "node:fs/promises";
 import { program, Option } from "commander";
 
 import { InternalError, InternalErrorKind } from "./error";
@@ -140,7 +140,7 @@ async function samplesForSection(
     durationInSec: number,
     limit: number = 24,
     round: number = 2,
-    verbose: boolean = false
+    verbose?: { log: (msg: string) => void }
 ): Promise<Axis[]> {
     const start = secsToTimeString(startInSecs);
     const duration = secsToTimeString(durationInSec);
@@ -194,7 +194,7 @@ async function samplesForSection(
     }
 
     if (verbose) {
-        dbg(`Extracted crop of ${count} frames.`);
+        verbose.log(dbg(`Extracted crop of ${count} frames.`));
     }
 
     return samples;
@@ -225,22 +225,26 @@ function cropFromMultiAxis(
     videoInfo: VideoInfo,
     samples: Axis[],
     filter: boolean,
-    verbose?: boolean
+    verbose?: { log: (msg: string) => void }
 ): Crop {
     const xAxis = samples.filter((sample) => sample.direction == Direction.X);
     const yAxis = samples.filter((sample) => sample.direction == Direction.Y);
     const xFiltered = filter ? filterAxis(xAxis) : xAxis;
     const yFiltered = filter ? filterAxis(yAxis) : yAxis;
     if (verbose) {
-        dbg(
-            `Filtered out ${
-                xAxis.length - xFiltered.length
-            } samples from x axis.`
+        verbose.log(
+            dbg(
+                `Filtered out ${
+                    xAxis.length - xFiltered.length
+                } samples from x axis.`
+            )
         );
-        dbg(
-            `Filtered out ${
-                yAxis.length - yFiltered.length
-            } samples from y axis.`
+        verbose.log(
+            dbg(
+                `Filtered out ${
+                    yAxis.length - yFiltered.length
+                } samples from y axis.`
+            )
         );
     }
     const xMax = maxLargestAxis(xFiltered);
@@ -256,7 +260,7 @@ async function detectSafeCropFromMultipleParts(
     limit: number = 24,
     round: number = 2,
     filter: boolean = true,
-    verbose?: { videoInfo: VideoInfo }
+    verbose?: { videoInfo: VideoInfo; log: (msg: string) => void }
 ): Promise<Crop> {
     if (videoInfo.duration < maxDurationPerPartInSecs) {
         const samples = await samplesForSection(
@@ -265,9 +269,9 @@ async function detectSafeCropFromMultipleParts(
             videoInfo.duration,
             limit,
             round,
-            !!verbose
+            verbose
         );
-        return cropFromMultiAxis(videoInfo, samples, filter, !!verbose);
+        return cropFromMultiAxis(videoInfo, samples, filter, verbose);
     }
 
     const framesStartAndDuration = calculateStartAndDuration(
@@ -280,7 +284,7 @@ async function detectSafeCropFromMultipleParts(
 
     for (const { start, duration } of framesStartAndDuration) {
         samplesPromise.push(
-            samplesForSection(path, start, duration, limit, round, !!verbose)
+            samplesForSection(path, start, duration, limit, round, verbose)
         );
     }
 
@@ -294,13 +298,14 @@ async function detectSafeCropFromMultipleParts(
         );
     }
 
-    return cropFromMultiAxis(videoInfo, samples, filter, !!verbose);
+    return cropFromMultiAxis(videoInfo, samples, filter, verbose);
 }
 
 async function writeCropToFileMetadata(
     path: string,
     crop: Crop,
-    dryrun: boolean = false
+    dryrun: boolean = false,
+    log: (msg: string) => void
 ) {
     let command = `${$.escape(path)} --edit track:v1 `;
     let changed = false;
@@ -315,15 +320,17 @@ async function writeCropToFileMetadata(
     }
 
     if (!changed) {
-        warn(`Skipping write as crop is 0.`);
+        log(warn(`Skipping write as crop is 0.`));
         return;
     }
 
     if (dryrun) {
-        warn(
-            `Dryrun enabled. No metadata will be overwritten. Following would have been executed:`
+        log(
+            warn(
+                `Dryrun enabled. No metadata will be overwritten. Following would have been executed:`
+            )
         );
-        purple(`mkvpropedit ${command}`);
+        log(purple(`mkvpropedit ${command}`));
         return;
     }
 
@@ -340,7 +347,7 @@ async function writeCropToFileMetadata(
             );
         });
 
-    ok(`Write success!`);
+    log(ok(`Write success!`));
 }
 
 // ███▄ ▄███▓ ▄▄▄       ██▓ ███▄    █
@@ -393,21 +400,21 @@ program.parse(Bun.argv);
 
 const opts = program.opts();
 
-async function cropFile(path: string) {
-    writeSeparator();
+async function cropFile(path: string, log: (msg: string) => void) {
+    log(writeSeparator());
 
-    info(`File: ${path}`);
+    log(info(`File: ${path}`));
 
     if (!opts.overwrite && (await cropFlagIsSet(path))) {
-        warn(`Skipping file as mkv crop flags where allready set.`);
-        info(`Use --overwrite flag to still process file.`);
+        log(warn(`Skipping file as mkv crop flags where allready set.`));
+        log(info(`Use --overwrite flag to still process file.`));
         process.exit(0);
     }
 
     const videoInfo = await getVideoInfo(path);
 
-    info(`Resolution: ${videoInfo.width}x${videoInfo.height}`);
-    info(`Length: ${secsToTimeString(videoInfo.duration)} hh:mm:ss`);
+    log(info(`Resolution: ${videoInfo.width}x${videoInfo.height}`));
+    log(info(`Length: ${secsToTimeString(videoInfo.duration)} hh:mm:ss`));
 
     const crop = await detectSafeCropFromMultipleParts(
         path,
@@ -417,12 +424,12 @@ async function cropFile(path: string) {
         parseInt(opts.limit),
         undefined,
         opts.filter,
-        opts.verbose ? { videoInfo: videoInfo } : undefined
+        opts.verbose ? { videoInfo: videoInfo, log } : undefined
     );
 
-    ok(cropToString(crop));
+    log(ok(cropToString(crop)));
 
-    writeCropToFileMetadata(path, crop, opts.dryrun);
+    writeCropToFileMetadata(path, crop, opts.dryrun, log);
 }
 
 let paths: string[];
@@ -445,18 +452,28 @@ try {
     throw e;
 }
 
-const promises = paths.map((path) => cropFile(path));
+const promises = paths.map(async (path) => {
+    let stringBuffer = "";
+    const log = (msg: string) => (stringBuffer += msg);
+    try {
+        await cropFile(path, log);
+    } catch (e) {
+        console.write(stringBuffer);
+        if (e instanceof InternalError) {
+            error(e.message);
+            if (e.cause) {
+                error(e.cause);
+            }
+        } else {
+            throw e;
+        }
+    }
+    console.write(stringBuffer);
+});
 
 const results = await Promise.allSettled(promises);
 for (const result of results) {
     if (result.status == "rejected") {
-        if (result.reason instanceof InternalError) {
-            error(result.reason.message);
-            if (result.reason.cause) {
-                error(result.reason.cause);
-            }
-        } else {
-            throw result.reason;
-        }
+        errorAndExit(result.reason);
     }
 }
