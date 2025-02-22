@@ -8,6 +8,7 @@
 
 import type { ColorInput } from "bun";
 import type { Crop } from "./types";
+import thirdPartyLicenses from "../embed/THIRD-PARTY-LICENSES.txt";
 
 export function addCssColor<T extends { toString(): string }>(
     message: T,
@@ -61,4 +62,23 @@ export function cropToString(crop: Crop): string {
   - top:    ${crop.top}
   - right:  ${crop.right}
   - bottom: ${crop.bottom}`;
+}
+
+export function printLicenses(): void {
+    console.write(
+        `
+crop4mkv
+
+Copyright Adam McKellar <dev@mckellar.eu> 2025
+
+License:            MPL2
+Link License Text:  https://www.mozilla.org/en-US/MPL/2.0/
+Repository:         https://github.com/WyvernIXTL/crop4mkv
+ 
+-----------
+
+THIRD PARTY LICENSES:
+
+` + thirdPartyLicenses
+    );
 }

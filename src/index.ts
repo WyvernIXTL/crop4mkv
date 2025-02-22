@@ -19,12 +19,14 @@ import {
     errorAndExit,
     info,
     ok,
+    printLicenses,
     purple,
     warn,
     writeSeparator,
 } from "./printing";
 import { readMkvFromDirRecursive, secsToTimeString } from "./helper";
 import { Direction, type Axis, type Crop, type VideoInfo } from "./types";
+import { exit } from "node:process";
 
 function checkIfToolsAreInPath(): void {
     const tools = ["mkvpropedit", "ffprobe", "ffmpeg"];
@@ -421,6 +423,11 @@ program
 program.parse(Bun.argv);
 
 const opts = program.opts();
+
+if (opts.license) {
+    printLicenses();
+    exit(0);
+}
 
 async function cropFile(path: string, log: (msg: string) => void) {
     log(writeSeparator());
