@@ -22,7 +22,7 @@ import {
     warn,
     writeSeparator,
 } from "./printing";
-import { secsToTimeString } from "./helper";
+import { readMkvFromDirRecursive, secsToTimeString } from "./helper";
 import { Direction, type Axis, type Crop, type VideoInfo } from "./types";
 import { copyFile } from "node:fs";
 
@@ -386,9 +386,6 @@ program.parse(Bun.argv);
 
 const opts = program.opts();
 
-console.log(program.opts());
-console.log("Remaining arguments: ", program.args);
-
 async function cropFile(path: string) {
     writeSeparator();
 
@@ -421,16 +418,37 @@ async function cropFile(path: string) {
     writeCropToFileMetadata(path, crop, opts.dryrun);
 }
 
+let paths: string[];
+
 try {
-    const path = await getAbsolutPath(program.args[0]);
-    await cropFile(path);
-} catch (e) {
-    if (e instanceof InternalError) {
-        error(e.message);
-        if (e.cause) {
-            error(e.cause);
-        }
+    const pathStat = await stat(program.args[0]);
+    if (pathStat.isDirectory()) {
+        paths = await readMkvFromDirRecursive(program.args[0]);
+    } else if (pathStat.isFile()) {
+        const path = await getAbsolutPath(program.args[0]);
+        paths = [path];
     } else {
-        throw e;
+        errorAndExit("Path given is neither file nor folder.");
+    }
+} catch (e) {
+    if (e instanceof Error)
+        errorAndExit(`ERROR (while reading path):\n${e.message}`);
+    if (typeof e === "string")
+        errorAndExit(`ERROR (while reading path):\n${e}`);
+    throw e;
+}
+
+for (const path of paths) {
+    try {
+        await cropFile(path);
+    } catch (e) {
+        if (e instanceof InternalError) {
+            error(e.message);
+            if (e.cause) {
+                error(e.cause);
+            }
+        } else {
+            throw e;
+        }
     }
 }
