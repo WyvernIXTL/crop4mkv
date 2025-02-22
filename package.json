@@ -24,6 +24,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "commander": "^13.1.0"
+    "commander": "^13.1.0",
+    "p-limit": "^6.2.0"
   }
 }

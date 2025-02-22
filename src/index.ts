@@ -9,6 +9,7 @@
 import { $ } from "bun";
 import { stat } from "node:fs/promises";
 import { program, Option } from "commander";
+import pLimit from "p-limit";
 
 import { InternalError, InternalErrorKind } from "./error";
 import {
@@ -24,7 +25,6 @@ import {
 } from "./printing";
 import { readMkvFromDirRecursive, secsToTimeString } from "./helper";
 import { Direction, type Axis, type Crop, type VideoInfo } from "./types";
-import { copyFile } from "node:fs";
 
 function checkIfToolsAreInPath(): void {
     const tools = ["mkvpropedit", "ffprobe", "ffmpeg"];
@@ -392,6 +392,12 @@ program
             "Maximum duration per part in seconds."
         ).default(60)
     )
+    .addOption(
+        new Option(
+            "--concurrency <number>",
+            "Limits concurrency on promises being fullfilled. This limit is in place to hinder your system memory from running full on huge folders."
+        ).default(20)
+    )
     .option("--verbose", "Prints more information.")
     .option("--license", "Prints license information.")
     .argument("<PATH>", "Path of folder or mkv file.");
@@ -452,24 +458,27 @@ try {
     throw e;
 }
 
-const promises = paths.map(async (path) => {
-    let stringBuffer = "";
-    const log = (msg: string) => (stringBuffer += msg);
-    try {
-        await cropFile(path, log);
-    } catch (e) {
-        console.write(stringBuffer);
-        if (e instanceof InternalError) {
-            error(e.message);
-            if (e.cause) {
-                error(e.cause);
+const limit = pLimit(opts.concurrency);
+const promises = paths.map(async (path) =>
+    limit(async () => {
+        let stringBuffer = "";
+        const log = (msg: string) => (stringBuffer += msg);
+        try {
+            await cropFile(path, log);
+        } catch (e) {
+            console.write(stringBuffer);
+            if (e instanceof InternalError) {
+                error(e.message);
+                if (e.cause) {
+                    error(e.cause);
+                }
+            } else {
+                throw e;
             }
-        } else {
-            throw e;
         }
-    }
-    console.write(stringBuffer);
-});
+        console.write(stringBuffer);
+    })
+);
 
 const results = await Promise.allSettled(promises);
 for (const result of results) {
