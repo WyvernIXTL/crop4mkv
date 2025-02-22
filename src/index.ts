@@ -445,17 +445,18 @@ try {
     throw e;
 }
 
-for (const path of paths) {
-    try {
-        await cropFile(path);
-    } catch (e) {
-        if (e instanceof InternalError) {
-            error(e.message);
-            if (e.cause) {
-                error(e.cause);
+const promises = paths.map((path) => cropFile(path));
+
+const results = await Promise.allSettled(promises);
+for (const result of results) {
+    if (result.status == "rejected") {
+        if (result.reason instanceof InternalError) {
+            error(result.reason.message);
+            if (result.reason.cause) {
+                error(result.reason.cause);
             }
         } else {
-            throw e;
+            throw result.reason;
         }
     }
 }
