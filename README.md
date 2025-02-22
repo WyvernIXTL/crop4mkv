@@ -12,22 +12,22 @@ Video players like [MPV](https://mpv.io/) read this MKV flag and crop the video 
 
 Generate and set crop tags for a single file.
 ```pwsh
-crop4mkv PATH_TO_FILE
+crop4mkv ./myvideo.mkv
 ```
 
-Generate and set crop tags for a directory with PowerShell:
+Generate and set crop tags recursively for a directory:
 ```pwsh
-Get-ChildItem -Recurse -Filter *.mkv | ForEach-Object { crop4mkv $_.FullName }
+crop4mkv ./myDir/
 ```
 
 Do not write tag to file:
 ```pwsh
-crop4mkv PATH_TO_FILE --dryrun
+crop4mkv --dryrun PATH
 ```
 
 Skip check for existence of crop tags:
 ```pwsh
-crop4mkv PATH_TO_FILE --overwrite
+crop4mkv --overwrite PATH
 ```
 
 ## Prerequisites
