@@ -6,8 +6,9 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/.
  */
 
-import { $, type ColorInput } from "bun";
-import { parseArgs } from "util";
+import { $ } from "bun";
+import { readdir, stat } from "node:fs/promises";
+import { program, Option } from "commander";
 
 import { InternalError, InternalErrorKind } from "./error";
 import {
@@ -22,8 +23,8 @@ import {
     writeSeparator,
 } from "./printing";
 import { secsToTimeString } from "./helper";
-import { Dir } from "fs";
 import { Direction, type Axis, type Crop, type VideoInfo } from "./types";
+import { copyFile } from "node:fs";
 
 function checkIfToolsAreInPath(): void {
     const tools = ["mkvpropedit", "ffprobe", "ffmpeg"];
@@ -193,7 +194,7 @@ async function samplesForSection(
     }
 
     if (verbose) {
-        info(`Extracted crop of ${count} frames.`);
+        dbg(`Extracted crop of ${count} frames.`);
     }
 
     return samples;
@@ -231,12 +232,12 @@ function cropFromMultiAxis(
     const xFiltered = filter ? filterAxis(xAxis) : xAxis;
     const yFiltered = filter ? filterAxis(yAxis) : yAxis;
     if (verbose) {
-        info(
+        dbg(
             `Filtered out ${
                 xAxis.length - xFiltered.length
             } samples from x axis.`
         );
-        info(
+        dbg(
             `Filtered out ${
                 yAxis.length - yFiltered.length
             } samples from y axis.`
@@ -347,106 +348,77 @@ async function writeCropToFileMetadata(
 
 checkIfToolsAreInPath();
 
-const { values, positionals } = parseArgs({
-    args: Bun.argv,
-    options: {
-        help: {
-            type: "boolean",
-        },
-        dryrun: {
-            type: "boolean",
-        },
-        overwrite: {
-            type: "boolean",
-        },
-        verbose: {
-            type: "boolean",
-        },
-        limit: {
-            type: "string",
-            default: "24",
-        },
-        parts: {
-            type: "string",
-            default: "6",
-        },
-        maxduration: {
-            type: "string",
-            default: "60",
-        },
-        rmoutlier: {
-            type: "boolean",
-        },
-    },
-    strict: true,
-    allowPositionals: true,
-});
+program
+    .name("crop4mkv")
+    .description(
+        "Bun TS script that analyzes crop margins of a video and sets the flags for an MKV."
+    )
+    .version("0.5.0")
+    .option("-d, --dryrun", "When set does not write tags to file.")
+    .option(
+        "-o, --overwrite",
+        "When set does not check if tags are allready set."
+    )
+    .option("--no-filter", "Disables filtering outliers.")
+    .addOption(
+        new Option(
+            "--limit <number>",
+            "Pixels with brightness below the limit are detected as black."
+        ).default(24)
+    )
+    .addOption(
+        new Option(
+            "--parts <number>",
+            "At how many points do you want to check your video? The more the better is the coverage."
+        ).default(6)
+    )
+    .addOption(
+        new Option(
+            "--max-duration <number>",
+            "Maximum duration per part in seconds."
+        ).default(60)
+    )
+    .option("--verbose", "Prints more information.")
+    .option("--license", "Prints license information.")
+    .argument("<PATH>", "Path of folder or mkv file.");
 
-if (values["help"] || !positionals[positionals.length - 1].endsWith("mkv")) {
-    console.write(`
-crop4mkv
+program.parse(Bun.argv);
 
-Bun ts script that analyses crop margins of a video and sets the flags for an mkv.
+const opts = program.opts();
 
-Usage: crop4mkv [Options] FILE_PATH
+console.log(program.opts());
+console.log("Remaining arguments: ", program.args);
 
-Options:
---dryrun      When set does not write tags to file.
---overwrite   When set does not check if tags are allready set.
---rmoutlier   Use outlier filtering for parts as well. This might result in some scenes being overly cropped.
---limit       Sets the value of a pixel where it is detected as black if lower. (Default: 24)
---parts       At how many points do you want to check your video? The more the better is the coverage. (Default: 6)
---maxduration What is the maximum duration to check per point. (Default: 60)
---help        Shows this message.
---verbose     Prints information for debugging.
+async function cropFile(path: string) {
+    writeSeparator();
 
-Examples:
+    info(`File: ${path}`);
 
-crop4mkv --dryrun --overwrite movie.mkv // checks what crop4mkv would do
+    if (!opts.overwrite && (await cropFlagIsSet(path))) {
+        warn(`Skipping file as mkv crop flags where allready set.`);
+        info(`Use --overwrite flag to still process file.`);
+        process.exit(0);
+    }
 
-crop4mkv --rmoutlier movie.mkv // Sometimes there are movies where only a few scenes are not 21:9 but 16:9. 
-// Setting this option might result in some scenes being more cropped than wanted.
+    const videoInfo = await getVideoInfo(path);
 
-crop4mkv --parts 2 --maxduration 30 movie.mkv // slightly faster, as less video is checked
+    info(`Resolution: ${videoInfo.width}x${videoInfo.height}`);
+    info(`Length: ${secsToTimeString(videoInfo.duration)} hh:mm:ss`);
 
+    const crop = await detectSafeCropFromMultipleParts(
+        path,
+        videoInfo,
+        parseInt(opts.parts),
+        parseInt(opts.maxDuration),
+        parseInt(opts.limit),
+        undefined,
+        opts.filter,
+        opts.verbose ? { videoInfo: videoInfo } : undefined
+    );
 
-Copyright Adam McKellar <dev@mckellar.eu> 2025
+    ok(cropToString(crop));
 
-This Program ('crop4mkv') is subject to the terms of the Mozilla Public
-License, v. 2.0. If a copy of the MPL was not distributed with this
-file, You can obtain one at https://mozilla.org/MPL/2.0/.
-        `);
-    process.exit(0);
+    writeCropToFileMetadata(path, crop, opts.dryrun);
 }
 
-writeSeparator();
-
-const videoFilePath = await getAbsolutPath(positionals[positionals.length - 1]);
-
-info(`File: ${videoFilePath}`);
-
-if (!values["overwrite"] && (await cropFlagIsSet(videoFilePath))) {
-    warn(`Skipping file as mkv crop flags where allready set.`);
-    info(`Use --overwrite flag to still process file.`);
-    process.exit(0);
-}
-
-const videoInfo = await getVideoInfo(videoFilePath);
-
-info(`Resolution: ${videoInfo.width}x${videoInfo.height}`);
-info(`Length: ${secsToTimeString(videoInfo.duration)} hh:mm:ss`);
-
-const crop = await detectSafeCropFromMultipleParts(
-    videoFilePath,
-    videoInfo,
-    parseInt(values.parts),
-    parseInt(values.maxduration),
-    parseInt(values.limit),
-    undefined,
-    values.rmoutlier,
-    values.verbose ? { videoInfo: videoInfo } : undefined
-);
-
-ok(cropToString(crop));
-
-writeCropToFileMetadata(videoFilePath, crop, values.dryrun);
+await cropFile(program.args[0]);
