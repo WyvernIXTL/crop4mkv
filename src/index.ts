@@ -8,7 +8,7 @@
 
 import { $ } from "bun";
 import { stat } from "node:fs/promises";
-import { program, Option } from "commander";
+import { program, Option, InvalidArgumentError } from "commander";
 import pLimit from "p-limit";
 
 import { InternalError, InternalErrorKind } from "./error";
@@ -362,6 +362,14 @@ async function writeCropToFileMetadata(
 
 checkIfToolsAreInPath();
 
+function optionsParseInt(value: any, _dummy: any) {
+    const parsedValue = parseInt(value, 10);
+    if (isNaN(parsedValue)) {
+        throw new InvalidArgumentError(`'${value}' is not an integer.`);
+    }
+    return parsedValue;
+}
+
 program
     .name("crop4mkv")
     .description(
@@ -378,25 +386,33 @@ program
         new Option(
             "--limit <number>",
             "Pixels with brightness below the limit are detected as black."
-        ).default(24)
+        )
+            .default(24)
+            .argParser(optionsParseInt)
     )
     .addOption(
         new Option(
             "--parts <number>",
             "At how many points do you want to check your video? The more the better is the coverage."
-        ).default(6)
+        )
+            .default(6)
+            .argParser(optionsParseInt)
     )
     .addOption(
         new Option(
             "--max-duration <number>",
             "Maximum duration per part in seconds."
-        ).default(60)
+        )
+            .default(60)
+            .argParser(optionsParseInt)
     )
     .addOption(
         new Option(
             "--concurrency <number>",
             "Limits concurrency on promises being fullfilled. This limit is in place to hinder your system memory from running full on huge folders."
-        ).default(20)
+        )
+            .default(20)
+            .argParser(optionsParseInt)
     )
     .option("--verbose", "Prints more information.")
     .option("--license", "Prints license information.")
@@ -425,9 +441,9 @@ async function cropFile(path: string, log: (msg: string) => void) {
     const crop = await detectSafeCropFromMultipleParts(
         path,
         videoInfo,
-        parseInt(opts.parts),
-        parseInt(opts.maxDuration),
-        parseInt(opts.limit),
+        opts.parts,
+        opts.maxDuration,
+        opts.limit,
         undefined,
         opts.filter,
         opts.verbose ? { videoInfo: videoInfo, log } : undefined
