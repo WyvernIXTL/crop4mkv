@@ -14,9 +14,9 @@ export function addCssColor<T extends { toString(): string }>(
     message: T,
     color: ColorInput
 ): string {
-    return `${Bun.color(color, "ansi")}${message.toString()}${Bun.color(
+    return `${Bun.color(color, "ansi-16m")}${message.toString()}${Bun.color(
         "white",
-        "ansi"
+        "ansi-16m"
     )}\n`;
 }
 
