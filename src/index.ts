@@ -8,7 +8,7 @@
 
 import { $ } from "bun";
 import { stat } from "node:fs/promises";
-import { program, Option, InvalidArgumentError } from "commander";
+import { program, Option, InvalidArgumentError, Argument } from "commander";
 import pLimit from "p-limit";
 
 import { InternalError, InternalErrorKind } from "./error";
@@ -418,7 +418,9 @@ program
     )
     .option("--verbose", "Prints more information.")
     .option("--license", "Prints license information.")
-    .argument("<PATH>", "Path of folder or mkv file.");
+    .addArgument(
+        new Argument("<PATH>", "Path of folder or mkv file.").argOptional()
+    );
 
 program.parse(Bun.argv);
 
@@ -427,6 +429,10 @@ const opts = program.opts();
 if (opts.license) {
     printLicenses();
     exit(0);
+}
+
+if (program.args.length == 0) {
+    program.help();
 }
 
 async function cropFile(path: string, log: (msg: string) => void) {
