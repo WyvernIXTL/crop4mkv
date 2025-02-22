@@ -61,7 +61,7 @@ function checkIfToolsAreInPath(): void {
 
 function writeSeparator(): void {
     const width = process.stdout.columns || 80;
-    console.write("=".repeat(width));
+    console.write("=".repeat(width) + "\n");
 }
 
 async function getAbsolutPath(path: string): Promise<string> {
