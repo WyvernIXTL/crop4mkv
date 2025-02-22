@@ -287,6 +287,13 @@ async function detectSafeCropFromMultipleParts(
     const results = await Promise.all(samplesPromise);
     const samples = results.flat(1);
 
+    if (samples.length == 0) {
+        throw new InternalError(
+            InternalErrorKind.MissingSamples,
+            "ERROR: Failed extracting any samples."
+        );
+    }
+
     return cropFromMultiAxis(videoInfo, samples, filter, !!verbose);
 }
 
