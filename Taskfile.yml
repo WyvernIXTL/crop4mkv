@@ -8,7 +8,7 @@ tasks:
   vp:
     cmds:
       - npm version {{.VERSION}} --sign-git-tag
-      - git push —-tags origin master
+      - git push —-tags origin
       - bun publish
     requires:
       vars:
