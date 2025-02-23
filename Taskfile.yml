@@ -5,3 +5,11 @@ tasks:
     cmds:
       - bunx generate-license-file --input package.json --output ./embed/THIRD-PARTY-LICENSES.txt --overwrite --omit-versions --ci
 
+  vp:
+    cmds:
+      - npm version {{.VERSION}} --sign-git-tag
+      - git push —-tags origin master
+      - bun publish
+    requires:
+      vars:
+        - VERSION
