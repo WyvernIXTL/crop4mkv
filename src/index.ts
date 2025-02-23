@@ -24,7 +24,11 @@ import {
     warn,
     writeSeparator,
 } from "./printing";
-import { readMkvFromDirRecursive, secsToTimeString } from "./helper";
+import {
+    getVersion,
+    readMkvFromDirRecursive,
+    secsToTimeString,
+} from "./helper";
 import { Direction, type Axis, type Crop, type VideoInfo } from "./types";
 import { exit } from "node:process";
 
@@ -377,7 +381,7 @@ program
     .description(
         "Bun TS script that analyzes crop margins of a video and sets the flags for an MKV."
     )
-    .version("0.5.0")
+    .version(getVersion())
     .option("-d, --dryrun", "When set does not write tags to file.")
     .option(
         "-o, --overwrite",

@@ -8,6 +8,7 @@
 
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import packageJson from "../package.json";
 
 export function padNumberToString(num: number): string {
     return `${num}`.padStart(2, "0");
@@ -31,4 +32,8 @@ export async function readMkvFromDirRecursive(path: string): Promise<string[]> {
     return entries
         .filter((e) => e.isFile() && e.name.endsWith("mkv"))
         .map((e) => join(e.parentPath, e.name));
+}
+
+export function getVersion(): string {
+    return packageJson.version ?? "unknown";
 }
