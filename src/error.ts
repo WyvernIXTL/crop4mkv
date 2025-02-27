@@ -10,6 +10,7 @@ export enum InternalErrorKind {
     WrongAxis = "WrongAxis",
     MissingSamples = "MissingSamples",
     ExecutionFailed = "ExecutionFailed",
+    GarbageReturned = "GarbageReturned",
     IoError = "IoError",
 }
 

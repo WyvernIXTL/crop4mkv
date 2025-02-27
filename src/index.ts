@@ -67,11 +67,20 @@ async function getVideoInfo(path: string): Promise<VideoInfo> {
         );
     }
 
-    return {
-        width: output["streams"][0]["width"],
-        height: output["streams"][0]["height"],
-        duration: output["format"]["duration"],
+    const result = {
+        width: output?.streams?.[0]?.width,
+        height: output?.streams?.[0]?.height,
+        duration: output?.format?.duration,
     };
+
+    if (!result.width || !result.height || !result.duration) {
+        throw new InternalError(
+            InternalErrorKind.GarbageReturned,
+            "ERROR: ffprobe did no return values in expected structure."
+        );
+    }
+
+    return result;
 }
 
 async function cropFlagIsSet(path: string): Promise<boolean> {
@@ -340,10 +349,9 @@ async function writeCropToFileMetadata(
         return;
     }
 
-    let { stderr } = await $`mkvpropedit ${{
+    await $`mkvpropedit ${{
         raw: command,
     }}`
-        .nothrow()
         .quiet()
         .catch((e) => {
             throw new InternalError(
@@ -447,7 +455,7 @@ async function cropFile(path: string, log: (msg: string) => void) {
     if (!opts.overwrite && (await cropFlagIsSet(path))) {
         log(warn(`Skipping file as mkv crop flags where allready set.`));
         log(info(`Use --overwrite flag to still process file.`));
-        process.exit(0);
+        return;
     }
 
     const videoInfo = await getVideoInfo(path);
@@ -498,6 +506,7 @@ const promises = paths.map(async (path) =>
         const log = (msg: string) => (stringBuffer += msg);
         try {
             await cropFile(path, log);
+            console.write(stringBuffer);
         } catch (e) {
             console.write(stringBuffer);
             if (e instanceof InternalError) {
@@ -509,7 +518,6 @@ const promises = paths.map(async (path) =>
                 throw e;
             }
         }
-        console.write(stringBuffer);
     })
 );
 
