@@ -117,7 +117,7 @@ function calculateCrop(video: VideoInfo, xAxis: Axis, yAxis: Axis): Crop {
 function maxLargestAxis(axisArray: Axis[]): Axis {
     if (axisArray.length === 0)
         throw new InternalError(InternalErrorKind.MissingSamples);
-    let result: Axis = { ...axisArray[0] };
+    const result: Axis = { ...axisArray[0] };
     for (const axis of axisArray) {
         if (axis.length > result.length) {
             result.length = axis.length;
@@ -140,7 +140,7 @@ function filterAxis(axis: Axis[]): Axis[] {
     const lowerBound = q1 - 1.5 * range;
     const upperBound = q3 + 1.5 * range;
 
-    let result: Axis[] = [];
+    const result: Axis[] = [];
     for (const value of axis) {
         if (value.length >= lowerBound && value.length <= upperBound) {
             result.push(value);
@@ -181,18 +181,13 @@ async function samplesForSection(
 
     let count = 0;
 
-    let samples: Axis[] = [];
+    const samples: Axis[] = [];
 
-    for (let line of stderr.toString().split("\n")) {
+    for (const line of stderr.toString().split("\n")) {
         const match = line.match(cropRegex);
         if (!match?.groups) {
             continue;
         }
-
-        const width = parseInt(match.groups.width);
-        const height = parseInt(match.groups.height);
-        const x = parseInt(match.groups.x);
-        const y = parseInt(match.groups.y);
 
         samples.push({
             length: parseInt(match.groups.width),
@@ -220,8 +215,8 @@ function calculateStartAndDuration(
     parts: number,
     maxDurationPerPartInSecs: number
 ): { start: number; duration: number }[] {
-    let partLength = Math.floor(filmDurationInSecs / parts);
-    let result: { start: number; duration: number }[] = [];
+    const partLength = Math.floor(filmDurationInSecs / parts);
+    const result: { start: number; duration: number }[] = [];
     for (let i = 0; i < parts; i += 1) {
         const start = i * partLength;
         result.push({
@@ -295,7 +290,7 @@ async function detectSafeCropFromMultipleParts(
         maxDurationPerPartInSecs
     );
 
-    let samplesPromise: Promise<Axis[]>[] = [];
+    const samplesPromise: Promise<Axis[]>[] = [];
 
     for (const { start, duration } of framesStartAndDuration) {
         samplesPromise.push(
@@ -325,10 +320,12 @@ async function writeCropToFileMetadata(
     let command = `${$.escape(path)} --edit track:v1 `;
     let changed = false;
     for (const key in crop) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (!(crop as any)[key]) {
             continue;
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cropValue: number = (crop as any)[key];
         command += `--set pixel-crop-${key}=${cropValue} `;
         changed = true;
@@ -376,6 +373,7 @@ async function writeCropToFileMetadata(
 
 checkIfToolsAreInPath();
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
 function optionsParseInt(value: any, _dummy: any) {
     const parsedValue = parseInt(value, 10);
     if (isNaN(parsedValue)) {
