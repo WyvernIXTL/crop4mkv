@@ -318,22 +318,10 @@ async function writeCropToFileMetadata(
     log: (msg: string) => void
 ) {
     let command = `${$.escape(path)} --edit track:v1 `;
-    let changed = false;
     for (const key in crop) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (!(crop as any)[key]) {
-            continue;
-        }
-
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cropValue: number = (crop as any)[key];
         command += `--set pixel-crop-${key}=${cropValue} `;
-        changed = true;
-    }
-
-    if (!changed) {
-        log(warn(`Skipping write as crop is 0.`));
-        return;
     }
 
     if (dryrun) {
@@ -393,7 +381,10 @@ program
         "-o, --overwrite",
         "When set does not check if tags are allready set."
     )
-    .option("--no-filter", "Disables filtering outliers.")
+    .option(
+        "-n, --no-filter",
+        "Disables filtering outliers. If your source has no crop, crop4mkv might still detect a crop, because of outlier filtering."
+    )
     .addOption(
         new Option(
             "--limit <number>",
