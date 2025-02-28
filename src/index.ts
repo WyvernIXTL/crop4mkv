@@ -476,7 +476,7 @@ async function cropFile(path: string, log: (msg: string) => void) {
 
     log(ok(cropToString(crop)));
 
-    writeCropToFileMetadata(path, crop, opts.dryrun, log);
+    await writeCropToFileMetadata(path, crop, opts.dryrun, log);
 }
 
 let paths: string[];
