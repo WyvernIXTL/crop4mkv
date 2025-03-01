@@ -265,11 +265,11 @@ function cropFromMultiAxis(
 async function detectSafeCropFromMultipleParts(
     path: string,
     videoInfo: VideoInfo,
-    parts: number = 3,
-    maxDurationPerPartInSecs: number = 60,
-    limit: number = 24,
+    parts: number,
+    maxDurationPerPartInSecs: number,
+    limit: number,
     round: number = 2,
-    filter: boolean = true,
+    filter: boolean,
     verbose?: { videoInfo: VideoInfo; log: (msg: string) => void }
 ): Promise<Crop> {
     if (videoInfo.duration < maxDurationPerPartInSecs) {
@@ -382,8 +382,8 @@ program
         "When set does not check if tags are allready set."
     )
     .option(
-        "-n, --no-filter",
-        "Disables filtering outliers. If your source has no crop, crop4mkv might still detect a crop, because of outlier filtering."
+        "-f, --filter",
+        "Enable filtering outliers. If a few scenes have no crop, this will lead to all scenes being cropped. This option will result in more crop overall!"
     )
     .addOption(
         new Option(
@@ -459,7 +459,7 @@ async function cropFile(path: string, log: (msg: string) => void) {
         opts.maxDuration,
         opts.limit,
         undefined,
-        opts.filter,
+        !!opts.filter,
         opts.verbose ? { videoInfo: videoInfo, log } : undefined
     );
 
