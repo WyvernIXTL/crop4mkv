@@ -8,7 +8,12 @@
 
 import { $ } from "bun";
 import { stat } from "node:fs/promises";
-import { program, Option, InvalidArgumentError, Argument } from "commander";
+import {
+    Option,
+    InvalidArgumentError,
+    Argument,
+    Command,
+} from "@commander-js/extra-typings";
 import pLimit from "p-limit";
 
 import { InternalError, InternalErrorKind } from "./error";
@@ -370,7 +375,7 @@ function optionsParseInt(value: any, _dummy: any) {
     return parsedValue;
 }
 
-program
+const program = new Command()
     .name("crop4mkv")
     .description(
         "Bun TS script that analyzes crop margins of a video and sets the flags for an MKV."
