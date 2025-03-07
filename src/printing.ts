@@ -96,7 +96,7 @@ export class ProgressBar {
         const percent = Math.ceil(ratio * 100);
         const runningRatio = Math.abs(this.running / this.length);
         const tail = ` | ${percent}% | ${this.progress} / ${this.length}  `;
-        const head = " ";
+        const head = "";
         const availableLength =
             this.terminalWidth - Bun.stringWidth(tail) - Bun.stringWidth(head);
         const progressPoints = Math.ceil(availableLength * ratio);
