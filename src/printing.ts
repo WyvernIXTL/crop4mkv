@@ -82,3 +82,51 @@ THIRD PARTY LICENSES:
 ` + thirdPartyLicenses
     );
 }
+
+export class ProgressBar {
+    private progress = -1;
+    private running = 1;
+
+    constructor(private length: number, private terminalWidth: number) {
+        this.tick();
+    }
+
+    private render(): void {
+        const ratio = Math.abs(this.progress / this.length);
+        const percent = Math.ceil(ratio * 100);
+        const runningRatio = Math.abs(this.running / this.length);
+        const tail = ` | ${percent}% | ${this.progress} / ${this.length}  `;
+        const head = " ";
+        const availableLength =
+            this.terminalWidth - Bun.stringWidth(tail) - Bun.stringWidth(head);
+        const progressPoints = Math.ceil(availableLength * ratio);
+        const runningPoints = Math.ceil(availableLength * runningRatio);
+        const progressString =
+            "▓".repeat(progressPoints) +
+            "▒".repeat(
+                progressPoints + runningPoints <= availableLength
+                    ? runningPoints
+                    : availableLength - progressPoints
+            ) +
+            "░".repeat(
+                Math.max(availableLength - progressPoints - runningPoints, 0)
+            );
+        console.write(head + progressString + tail);
+    }
+
+    public started(): void {
+        this.running++;
+        this.carriageReturn();
+        this.render();
+    }
+
+    public tick(): void {
+        if (this.running > 0) this.running--;
+        this.progress++;
+        this.render();
+    }
+
+    public carriageReturn(): void {
+        console.write("\r");
+    }
+}

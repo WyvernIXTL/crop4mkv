@@ -28,6 +28,7 @@ import {
     purple,
     warn,
     writeSeparator,
+    ProgressBar,
 } from "./printing";
 import {
     getVersion,
@@ -493,13 +494,20 @@ try {
     throw e;
 }
 
+const bar = new ProgressBar(
+    paths.length,
+    Math.min(process.stdout.columns ?? 160, 160)
+);
+
 const limit = pLimit(opts.concurrency);
 const promises = paths.map(async (path) =>
     limit(async () => {
+        bar.started();
         let stringBuffer = "";
         const log = (msg: string) => (stringBuffer += msg);
         try {
             await cropFile(path, log);
+            bar.carriageReturn();
             console.write(stringBuffer);
         } catch (e) {
             console.write(stringBuffer);
@@ -512,6 +520,7 @@ const promises = paths.map(async (path) =>
                 throw e;
             }
         }
+        bar.tick();
     })
 );
 
@@ -521,3 +530,5 @@ for (const result of results) {
         errorAndExit(result.reason);
     }
 }
+
+bar.carriageReturn();
