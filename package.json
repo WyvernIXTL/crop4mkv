@@ -1,7 +1,7 @@
 {
   "name": "crop4mkv",
   "description": "Bun TS script that analyzes crop margins of a video and sets the flags for an MKV.",
-  "version": "0.5.7",
+  "version": "0.6.0",
   "module": "index.ts",
   "type": "module",
   "bin": {
