@@ -46,7 +46,7 @@ crop4mkv --filter PATH
 
 If you wish filter a large library regularly, you might be interested in the `--guard` flag.
 When enabled `crop4mkv` writes a database into the directory that is scanned, which in turn
-is used in every consecutive call for skipping already processed files.
+is used in every consecutive call for skipping already processed files (or files that ffmpeg does not like).
 
 ```sh
 crop4mkv ./myBigAssLibrary/ --guard # create db and ignore already processed files
@@ -74,7 +74,7 @@ crop4mkv PATH -o # Overwrite
 
 I recommend for Windows users to install these dependencies apart from bun with [Scoop](https://scoop.sh/):
 
-```
+```sh
 scoop bucket add main
 scoop install main/ffmpeg
 scoop bucket add extras
