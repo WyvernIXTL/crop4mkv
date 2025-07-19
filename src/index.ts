@@ -36,7 +36,9 @@ import {
     secsToTimeString,
 } from "./helper";
 import { Direction, type Axis, type Crop, type VideoInfo } from "./types";
+import { DB, GUARD_DB_NAME } from "./guard";
 import { exit } from "node:process";
+import { basename, dirname, join } from "node:path";
 
 function checkIfToolsAreInPath(): void {
     const tools = ["mkvpropedit", "ffprobe", "ffmpeg"];
@@ -423,6 +425,10 @@ const program = new Command()
             .default(20)
             .argParser(optionsParseInt)
     )
+    .option(
+        "-g --guard",
+        "Creates and uses a database to store file paths of processed files, to ignore said files, when run again."
+    )
     .option("--verbose", "Prints more information.")
     .option("--license", "Prints license information.")
     .addArgument(
@@ -475,14 +481,18 @@ async function cropFile(path: string, log: (msg: string) => void) {
 }
 
 let paths: string[];
+let dbPath: string;
 
 try {
     const pathStat = await stat(program.args[0]);
+    const path = program.args[0];
     if (pathStat.isDirectory()) {
-        paths = await readMkvFromDirRecursive(program.args[0]);
+        dbPath = join(path, GUARD_DB_NAME);
+        paths = await readMkvFromDirRecursive(path);
     } else if (pathStat.isFile()) {
-        const path = await getAbsolutPath(program.args[0]);
-        paths = [path];
+        dbPath = join(dirname(path), GUARD_DB_NAME);
+        const mkvFilePath = await getAbsolutPath(path);
+        paths = [mkvFilePath];
     } else {
         errorAndExit("Path given is neither file nor folder.");
     }
@@ -492,6 +502,21 @@ try {
     if (typeof e === "string")
         errorAndExit(`ERROR (while reading path):\n${e}`);
     throw e;
+}
+
+let db: DB | undefined;
+if (opts.guard) {
+    db = new DB(dbPath);
+
+    if (!opts.overwrite) {
+        paths = paths.filter((path) => {
+            const processed = db!.fileProcessed(path);
+            if (processed) {
+                console.write(warn(`Skipping (--guard): ${basename(path)}`));
+            }
+            return !processed;
+        });
+    }
 }
 
 const bar = new ProgressBar(
@@ -509,6 +534,7 @@ const promises = paths.map(async (path) =>
             await cropFile(path, log);
             bar.carriageReturn();
             console.write(stringBuffer);
+            db?.setProcessed(path);
         } catch (e) {
             console.write(stringBuffer);
             if (e instanceof InternalError) {
@@ -516,6 +542,7 @@ const promises = paths.map(async (path) =>
                 if (e.cause) {
                     error(e.cause);
                 }
+                db?.setError(path);
             } else {
                 throw e;
             }
@@ -532,3 +559,5 @@ for (const result of results) {
 }
 
 bar.carriageReturn();
+
+db?.flush();
