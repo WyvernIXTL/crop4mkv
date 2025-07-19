@@ -385,7 +385,7 @@ const program = new Command()
     .option("-d, --dryrun", "When set does not write tags to file.")
     .option(
         "-o, --overwrite",
-        "When set does not check if tags are allready set."
+        "When set does not check if tags are already set."
     )
     .option(
         "-f, --filter",
@@ -418,7 +418,7 @@ const program = new Command()
     .addOption(
         new Option(
             "--concurrency <number>",
-            "Limits concurrency on promises being fullfilled. This limit is in place to hinder your system memory from running full on huge folders."
+            "Limits concurrency on promises being fulfilled. This limit is in place to hinder your system memory from running full on huge folders."
         )
             .default(20)
             .argParser(optionsParseInt)
@@ -448,7 +448,7 @@ async function cropFile(path: string, log: (msg: string) => void) {
     log(info(`File: ${path}`));
 
     if (!opts.overwrite && (await cropFlagIsSet(path))) {
-        log(warn(`Skipping file as mkv crop flags where allready set.`));
+        log(warn(`Skipping file as mkv crop flags where already set.`));
         log(info(`Use --overwrite flag to still process file.`));
         return;
     }
