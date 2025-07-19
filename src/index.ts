@@ -560,4 +560,4 @@ for (const result of results) {
 
 bar.carriageReturn();
 
-db?.flush();
+db?.close();

@@ -82,7 +82,7 @@ export class DB {
         });
     }
 
-    public flush() {
-        this.db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+    public close() {
+        this.db.close();
     }
 }
