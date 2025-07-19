@@ -1,6 +1,6 @@
 import { Database, Statement } from "bun:sqlite";
 
-export const GUARD_DB_NAME = "crop4mkv.sqlite3";
+export const GUARD_DB_NAME = ".crop4mkv.guard";
 
 enum FileStatus {
     NotProcessed = 0,
