@@ -18,7 +18,7 @@ tasks:
   compile:
     env:
       PACKAGE: |
-        if (-not (Test-Path .\packaged\)) { mkdir packaged }
+        mkdir ./packaged/ -ErrorAction Ignore
         mkdir ./packaged/crop4mkv
         bun build --compile --minify --sourcemap ./src/index.ts --outfile ./packaged/crop4mkv/crop4mkv
         cp ./LICENSE ./packaged/crop4mkv/
@@ -33,3 +33,6 @@ tasks:
         platforms: [linux, darwin]
       - cmd: pwsh -c "Remove-Item -Recurse ./packaged/crop4mkv"
 
+  clean:
+    cmds:
+      - pwsh -c "rm -Recurse packaged"
