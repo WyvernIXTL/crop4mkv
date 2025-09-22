@@ -23,8 +23,6 @@ jobs:
             name: macos-aarch64
           - os: windows-2025
             name: windows-x86_64
-          - os: windows-11-arm
-            name: windows-aarch64
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -41,10 +39,10 @@ jobs:
         run: |
           $version = (Get-Content package.json | ConvertFrom-Json).version
           if (Test-Path "./packaged/crop4mkv.7z") {
-            Rename-Item "./packaged/crop4mkv.7z" "./packaged/crop4mkv-$version-${{ matrix.name }}.7z"
+            Move-Item "./packaged/crop4mkv.7z" "./packaged/crop4mkv-$version-${{ matrix.name }}.7z"
           }
           if (Test-Path "./packaged/crop4mkv.tar.xz") {
-            Rename-Item "./packaged/crop4mkv.tar.xz" "./packaged/crop4mkv-$version-${{ matrix.name }}.tar.xz"
+            Move-Item "./packaged/crop4mkv.tar.xz" "./packaged/crop4mkv-$version-${{ matrix.name }}.tar.xz"
           }
         shell: pwsh
       - name: Upload Binary

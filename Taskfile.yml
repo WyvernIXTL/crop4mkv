@@ -18,6 +18,7 @@ tasks:
   compile:
     env:
       PACKAGE: |
+        if (-not (Test-Path .\packaged\)) { mkdir packaged }
         mkdir ./packaged/crop4mkv
         bun build --compile --minify --sourcemap ./src/index.ts --outfile ./packaged/crop4mkv/crop4mkv
         cp ./LICENSE ./packaged/crop4mkv/
