@@ -18,15 +18,15 @@ tasks:
   compile:
     env:
       PACKAGE: |
-        mkdir ./packaged/ -ErrorAction Ignore
-        mkdir ./packaged/crop4mkv
+        New-Item -Path ./packaged/ -ItemType Directory -ErrorAction Ignore
+        New-Item -Path ./packaged/crop4mkv -ItemType Directory
         bun build --compile --minify --sourcemap ./src/index.ts --outfile ./packaged/crop4mkv/crop4mkv
-        cp ./LICENSE ./packaged/crop4mkv/
-        cp ./embed/RUNTIME-LICENSING.md ./packaged/crop4mkv/
-        cp ./embed/THIRD-PARTY-LICENSES.txt ./packaged/crop4mkv/
-        cp ./README.md ./packaged/crop4mkv/
+        Copy-Item ./LICENSE ./packaged/crop4mkv/
+        Copy-Item ./embed/RUNTIME-LICENSING.md ./packaged/crop4mkv/
+        Copy-Item ./embed/THIRD-PARTY-LICENSES.txt ./packaged/crop4mkv/
+        Copy-Item ./README.md ./packaged/crop4mkv/
     cmds:
-      - cmd: pwsh -c "$env:PACKAGE"
+      - cmd: pwsh -c "$PACKAGE"
         platforms: [windows]
       - cmd: pwsh -c "Invoke-Expression \$env:PACKAGE"
         platforms: [linux, darwin]
