@@ -68,14 +68,14 @@ crop4mkv PATH -o # Overwrite
 
 ## Installation
 
-### [Scoop](https://scoop.sh/) (Windows)
+### [Scoop](https://scoop.sh/) *(Windows)*
 
 ```sh
 scoop bucket add stupid-bucket https://github.com/WyvernIXTL/stupid-bucket
 scoop install stupid-bucket/crop4mkv
 ```
 
-### [Homebrew](https://brew.sh/) (Linux)
+### [Homebrew](https://brew.sh/) *(MacOS / Linux)*
 
 ```sh
 brew install wyvernixtl/tap2/crop4mkv
