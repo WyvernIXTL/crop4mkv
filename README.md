@@ -83,9 +83,28 @@ scoop install extras/mkvtoolnix
 
 ## Installation
 
+### [Bun](https://bun.sh/)
+
 ```sh
 bun install -g crop4mkv
 ```
+### [Scoop](https://scoop.sh/) (Windows)
+
+```sh
+scoop bucket add stupid-bucket https://github.com/WyvernIXTL/stupid-bucket
+scoop install stupid-bucket/crop4mkv
+```
+
+### [Homebrew](https://brew.sh/) (Linux/MacOS)
+
+```sh
+brew install wyvernixtl/tap2/crop4mkv
+```
+
+### Portable Builds
+
+[![Download for Windows](https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white) ![Download for macOS](https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white) ![Download for Linux](https://img.shields.io/badge/Download-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/WyvernIXTL/crop4mkv/releases/latest/)
+
 
 ## Images
 
