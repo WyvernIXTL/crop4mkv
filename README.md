@@ -66,28 +66,8 @@ crop4mkv PATH -dof # Dryrun, Overwrite, Filter
 crop4mkv PATH -o # Overwrite
 ```
 
-## Prerequisites
-
--   [MKVToolNix](https://mkvtoolnix.download/) installed and in [PATH](https://www.howtogeek.com/787217/how-to-edit-environment-variables-on-windows-10-or-11/).
--   [ffmpeg](https://ffmpeg.org/) installed and in PATH.
--   [bun](https://bun.sh/) installed and in PATH.
-
-I recommend for Windows users to install these dependencies apart from bun with [Scoop](https://scoop.sh/):
-
-```sh
-scoop bucket add main
-scoop install main/ffmpeg
-scoop bucket add extras
-scoop install extras/mkvtoolnix
-```
-
 ## Installation
 
-### [Bun](https://bun.sh/)
-
-```sh
-bun install -g crop4mkv
-```
 ### [Scoop](https://scoop.sh/) (Windows)
 
 ```sh
@@ -95,13 +75,27 @@ scoop bucket add stupid-bucket https://github.com/WyvernIXTL/stupid-bucket
 scoop install stupid-bucket/crop4mkv
 ```
 
-### [Homebrew](https://brew.sh/) (Linux/MacOS)
+### [Homebrew](https://brew.sh/) (Linux)
 
 ```sh
 brew install wyvernixtl/tap2/crop4mkv
 ```
 
+### [Bun](https://bun.sh/)
+
+Prerequisites:
+-   [MKVToolNix](https://mkvtoolnix.download/) installed and in [PATH](https://www.howtogeek.com/787217/how-to-edit-environment-variables-on-windows-10-or-11/).
+-   [ffmpeg](https://ffmpeg.org/) installed and in PATH.
+
+```sh
+bun install -g crop4mkv
+```
+
 ### Portable Builds
+
+Prerequisites:
+-   [MKVToolNix](https://mkvtoolnix.download/) installed and in [PATH](https://www.howtogeek.com/787217/how-to-edit-environment-variables-on-windows-10-or-11/).
+-   [ffmpeg](https://ffmpeg.org/) installed and in PATH.
 
 [![Download for Windows](https://img.shields.io/badge/Download-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white) ![Download for macOS](https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white) ![Download for Linux](https://img.shields.io/badge/Download-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/WyvernIXTL/crop4mkv/releases/latest/)
 
