@@ -9,7 +9,7 @@
 import type { ColorInput } from "bun";
 import type { Crop } from "./types";
 import thirdPartyLicenses from "../embed/THIRD-PARTY-LICENSES.txt";
-import runtimeLicensing from "../embed/RUNTIME-LICENSING.md" with { type: "txt" };
+import runtimeLicensing from "../embed/RUNTIME-LICENSING_links.txt" with { type: "txt" };
 
 export function addCssColor<T extends { toString(): string }>(
     message: T,
@@ -81,7 +81,8 @@ Repository:         https://github.com/WyvernIXTL/crop4mkv
 THIRD PARTY LICENSES:
 
 ` +
-            thirdPartyLicenses +
+            thirdPartyLicenses
+            + "\n-----------\n\n\n" +
             runtimeLicensing
     );
 }
