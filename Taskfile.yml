@@ -26,7 +26,10 @@ tasks:
         cp ./embed/THIRD-PARTY-LICENSES.txt ./packaged/crop4mkv/
         cp ./README.md ./packaged/crop4mkv/
     cmds:
-      - pwsh -c "$package"
+      - cmd: pwsh -c "$env:PACKAGE"
+        platforms: [windows]
+      - cmd: pwsh -c "Invoke-Expression \$env:PACKAGE"
+        platforms: [linux, darwin]
       - cmd: 7z a ./packaged/crop4mkv.7z ./packaged/crop4mkv/ 
         platforms: [windows]
       - cmd: tar -cJf ./packaged/crop4mkv.tar.xz ./packaged/crop4mkv
