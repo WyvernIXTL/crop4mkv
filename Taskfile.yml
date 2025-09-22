@@ -14,3 +14,21 @@ tasks:
     requires:
       vars:
         - VERSION
+
+  compile:
+    env:
+      PACKAGE: |
+        mkdir ./packaged/crop4mkv
+        bun build --compile --minify --sourcemap ./src/index.ts --outfile ./packaged/crop4mkv/crop4mkv
+        cp ./LICENSE ./packaged/crop4mkv/
+        cp ./embed/RUNTIME-LICENSING.md ./packaged/crop4mkv/
+        cp ./embed/THIRD-PARTY-LICENSES.txt ./packaged/crop4mkv/
+        cp ./README.md ./packaged/crop4mkv/
+    cmds:
+      - pwsh -c "$package"
+      - cmd: 7z a ./packaged/crop4mkv.7z ./packaged/crop4mkv/ 
+        platforms: [windows]
+      - cmd: tar -cJf ./packaged/crop4mkv.tar.xz ./packaged/crop4mkv
+        platforms: [linux, darwin]
+      - cmd: pwsh -c "Remove-Item -Recurse ./packaged/crop4mkv"
+
